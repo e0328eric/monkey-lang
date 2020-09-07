@@ -4,6 +4,9 @@ use crate::token::Token;
 
 pub enum MonkeyErr {
     IOErr(std::io::Error),
+    PrefixNoneErr,
+    InfixNoneErr,
+    ParseExprErr { expected: String, got: Token },
     ParseTokDiffErr { expected: Token, got: Token },
 }
 
@@ -11,6 +14,14 @@ impl Display for MonkeyErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MonkeyErr::IOErr(ref e) => Display::fmt(e, f),
+            MonkeyErr::PrefixNoneErr => write!(f, "Cannot take prefix function"),
+            MonkeyErr::InfixNoneErr => write!(f, "Cannot take infix function"),
+            MonkeyErr::ParseExprErr { expected, got } => write!(
+                f,
+                "Cannot parse {0} with {1}",
+                expected,
+                got.take_tok_name()
+            ),
             MonkeyErr::ParseTokDiffErr { expected, got } => write!(
                 f,
                 "Expected next token to be {0}, got {1} instead",

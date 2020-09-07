@@ -59,14 +59,6 @@ impl Token {
         }
     }
 
-    pub fn unwrap_number(&self) -> i64 {
-        if let Token::INT(n) = self {
-            *n
-        } else {
-            panic!("Cannot take number from INT");
-        }
-    }
-
     pub fn take_tok_name(&self) -> String {
         match self {
             Token::IDENT(_) => "IDENT".to_string(),

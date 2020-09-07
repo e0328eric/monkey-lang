@@ -50,6 +50,30 @@ impl Token {
             _ => None,
         }
     }
+
+    pub fn unwrap_string(&self) -> String {
+        if let Token::IDENT(ref s) = self {
+            s.to_owned()
+        } else {
+            panic!("Cannot take string from IDENT");
+        }
+    }
+
+    pub fn unwrap_number(&self) -> i64 {
+        if let Token::INT(n) = self {
+            *n
+        } else {
+            panic!("Cannot take number from INT");
+        }
+    }
+
+    pub fn take_tok_name(&self) -> String {
+        match self {
+            Token::IDENT(_) => "IDENT".to_string(),
+            Token::INT(_) => "INT".to_string(),
+            _ => format!("{:?}", self),
+        }
+    }
 }
 
 pub fn is_letter(chr: char) -> bool {

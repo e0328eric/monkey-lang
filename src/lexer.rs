@@ -1,5 +1,6 @@
 use crate::token::{self, Token};
 
+#[derive(Debug)]
 pub struct Lexer<'a> {
     pub input: &'a str,
     pub position: usize,
@@ -37,7 +38,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> Token {
         while self.ch.is_whitespace() {
             self.read_char()
         }

@@ -25,6 +25,17 @@ pub enum Expression {
     Ident(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum Precedence {
+    LOWEST,
+    EQUALS,
+    LESSGREATER,
+    SUM,
+    PRODUCT,
+    PREFIX,
+    CALL,
+}
+
 pub struct Parser {
     l: Vec<Token>,
     cur_position: usize,
@@ -131,6 +142,14 @@ impl Parser {
     }
 
     fn parse_expression_stmt(&mut self) -> error::Result<Statement> {
+        let expression = self.parse_expression(Precedence::LOWEST)?;
+        while self.take_token().0 != &Token::SEMICOLON {
+            self.next_token();
+        }
+        Ok(Statement::ExpressionStmt { expression })
+    }
+
+    fn parse_expression(&mut self, prece: Precedence) -> error::Result<Expression> {
         unimplemented!();
     }
 }

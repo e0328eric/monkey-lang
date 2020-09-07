@@ -1,3 +1,6 @@
+#![allow(unused)]
+use std::collections::HashMap;
+
 use crate::error;
 use crate::lexer::Lexer;
 use crate::token::Token;
@@ -6,10 +9,14 @@ type Error = error::MonkeyErr;
 
 // AST Types
 pub type Program = Vec<Statement>;
+type PrefixParseFn = fn() -> Expression;
+type InfixParseFn = fn(&Expression) -> Expression;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
-    LetStatement { name: String, value: Expression },
+    LetStmt { name: String, value: Expression },
+    ReturnStmt { value: Expression },
+    ExpressionStmt { expression: Expression },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -18,10 +25,11 @@ pub enum Expression {
     Ident(String),
 }
 
-#[derive(Debug)]
 pub struct Parser {
     l: Vec<Token>,
     cur_position: usize,
+    prefix_fns: HashMap<Token, PrefixParseFn>,
+    infix_fns: HashMap<Token, InfixParseFn>,
 }
 
 macro_rules! expect_peek {
@@ -40,7 +48,22 @@ macro_rules! expect_peek {
 impl Parser {
     pub fn new(l: Lexer<'_>) -> Self {
         let l: Vec<Token> = l.collect();
-        Self { l, cur_position: 0 }
+        let prefix_fns: HashMap<Token, PrefixParseFn> = HashMap::new();
+        let infix_fns: HashMap<Token, InfixParseFn> = HashMap::new();
+        Self {
+            l,
+            cur_position: 0,
+            prefix_fns,
+            infix_fns,
+        }
+    }
+
+    fn register_prefix(&mut self, tok: &Token, f: &PrefixParseFn) {
+        self.prefix_fns.insert(tok.clone(), *f);
+    }
+
+    fn register_infix(&mut self, tok: &Token, f: &InfixParseFn) {
+        self.infix_fns.insert(tok.clone(), *f);
     }
 
     fn next_token(&mut self) {
@@ -73,7 +96,8 @@ impl Parser {
     fn parse_statement(&mut self) -> error::Result<Statement> {
         match self.take_token().0 {
             Token::LET => self.parse_let_stmt(),
-            _ => unimplemented!(),
+            Token::RETURN => self.parse_return_stmt(),
+            _ => self.parse_expression_stmt(),
         }
     }
 
@@ -88,10 +112,26 @@ impl Parser {
             self.next_token();
         }
 
-        Ok(Statement::LetStatement {
+        Ok(Statement::LetStmt {
             name,
             value: Expression::NoneVal,
         })
+    }
+
+    fn parse_return_stmt(&mut self) -> error::Result<Statement> {
+        self.next_token();
+        // TODO: We're skipping the expressions until we
+        // encounter a semicolon
+        while self.take_token().0 != &Token::SEMICOLON {
+            self.next_token();
+        }
+        Ok(Statement::ReturnStmt {
+            value: Expression::NoneVal,
+        })
+    }
+
+    fn parse_expression_stmt(&mut self) -> error::Result<Statement> {
+        unimplemented!();
     }
 }
 
@@ -102,24 +142,62 @@ mod test {
     use crate::lexer::Lexer;
     #[test]
     fn parse_let() -> error::Result<()> {
-        let input = r#"let x  5;
+        let input = r#"
+        let x = 5;
         let y = 10;
-        let foobar = 838383;"#;
+        let foobar = 838383;
+        "#;
         let mut parser = Parser::new(Lexer::new(&input));
         let expected = vec![
-            Statement::LetStatement {
+            Statement::LetStmt {
                 name: "x".to_string(),
                 value: Expression::NoneVal,
             },
-            Statement::LetStatement {
+            Statement::LetStmt {
                 name: "y".to_string(),
                 value: Expression::NoneVal,
             },
-            Statement::LetStatement {
+            Statement::LetStmt {
                 name: "foobar".to_string(),
                 value: Expression::NoneVal,
             },
         ];
+        assert_eq!(expected, parser.parse_program()?);
+        Ok(())
+    }
+
+    #[test]
+    fn parse_return() -> error::Result<()> {
+        let input = r#"
+        return 5;
+        return 10;
+        return 993322;
+        "#;
+        let mut parser = Parser::new(Lexer::new(&input));
+        let expected = vec![
+            Statement::ReturnStmt {
+                value: Expression::NoneVal,
+            },
+            Statement::ReturnStmt {
+                value: Expression::NoneVal,
+            },
+            Statement::ReturnStmt {
+                value: Expression::NoneVal,
+            },
+        ];
+        assert_eq!(expected, parser.parse_program()?);
+        Ok(())
+    }
+
+    #[test]
+    fn parse_ident() -> error::Result<()> {
+        let input = r#"
+        foobar;
+        "#;
+        let mut parser = Parser::new(Lexer::new(&input));
+        let expected = vec![Statement::ExpressionStmt {
+            expression: Expression::NoneVal,
+        }];
         assert_eq!(expected, parser.parse_program()?);
         Ok(())
     }

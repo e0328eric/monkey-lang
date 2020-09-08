@@ -24,6 +24,7 @@ pub enum Expression {
     NoneVal,
     Ident(String),
     Integer(i64),
+    Boolean(bool),
     Prefix {
         operator: Token,
         right: Box<Expression>,
@@ -106,6 +107,8 @@ impl Parser {
         match self.take_token().0 {
             Token::IDENT(_) => Some(Parser::parse_identifier),
             Token::INT(_) => Some(Parser::parse_integer),
+            Token::TRUE => Some(Parser::parse_boolean),
+            Token::FALSE => Some(Parser::parse_boolean),
             Token::BANG => Some(Parser::parse_prefix_expr),
             Token::MINUS => Some(Parser::parse_prefix_expr),
             _ => None,
@@ -146,6 +149,10 @@ impl Parser {
                 got: self.take_token().0.clone(),
             })
         }
+    }
+
+    fn parse_boolean(&mut self) -> error::Result<Expression> {
+        Ok(Expression::Boolean(self.take_token().0 == &Token::TRUE))
     }
 
     fn parse_prefix_expr(&mut self) -> error::Result<Expression> {
@@ -250,100 +257,85 @@ mod test {
     use super::*;
     use crate::error;
     use crate::lexer::Lexer;
-    #[test]
-    fn parse_let() -> error::Result<()> {
-        let input = r#"
-        let x = 5;
+
+    macro_rules! test_parser {
+        ($test: ident => $input: expr; $($expected: expr),*) => {
+            #[test]
+            fn $test() -> error::Result<()> {
+                let input = $input;
+                let mut parser = Parser::new(Lexer::new(&input));
+                let mut expected: Vec<Statement> = Vec::new();
+                $(
+                    expected.push($expected);
+                )*
+                assert_eq!(expected, parser.parse_program()?);
+                Ok(())
+            }
+        };
+    }
+
+    test_parser!(
+        parse_let => r#"let x = 5;
         let y = 10;
-        let foobar = 838383;
-        "#;
-        let mut parser = Parser::new(Lexer::new(&input));
-        let expected = vec![
-            Statement::LetStmt {
-                name: "x".to_string(),
-                value: Expression::NoneVal,
-            },
-            Statement::LetStmt {
-                name: "y".to_string(),
-                value: Expression::NoneVal,
-            },
-            Statement::LetStmt {
-                name: "foobar".to_string(),
-                value: Expression::NoneVal,
-            },
-        ];
-        assert_eq!(expected, parser.parse_program()?);
-        Ok(())
-    }
+        let foobar = 838383;"#;
+        Statement::LetStmt {
+            name: "x".to_string(),
+            value: Expression::NoneVal,
+        },
+        Statement::LetStmt {
+            name: "y".to_string(),
+            value: Expression::NoneVal,
+        },
+        Statement::LetStmt {
+            name: "foobar".to_string(),
+            value: Expression::NoneVal,
+        }
+    );
 
-    #[test]
-    fn parse_return() -> error::Result<()> {
-        let input = r#"
-        return 5;
+    test_parser!(
+        parse_return => r#" return 5;
         return 10;
-        return 993322;
-        "#;
-        let mut parser = Parser::new(Lexer::new(&input));
-        let expected = vec![
-            Statement::ReturnStmt {
-                value: Expression::NoneVal,
-            },
-            Statement::ReturnStmt {
-                value: Expression::NoneVal,
-            },
-            Statement::ReturnStmt {
-                value: Expression::NoneVal,
-            },
-        ];
-        assert_eq!(expected, parser.parse_program()?);
-        Ok(())
-    }
+        return 993322;"#;
+        Statement::ReturnStmt {
+            value: Expression::NoneVal,
+        },
+        Statement::ReturnStmt {
+            value: Expression::NoneVal,
+        },
+        Statement::ReturnStmt {
+            value: Expression::NoneVal,
+        }
+    );
 
-    #[test]
-    fn parse_ident() -> error::Result<()> {
-        let input = r#"
-            foobar;
-            add;
-            asdf;
-        "#;
-        let mut parser = Parser::new(Lexer::new(&input));
-        let expected = vec![
-            Statement::ExpressionStmt {
-                expression: Expression::Ident("foobar".to_string()),
-            },
-            Statement::ExpressionStmt {
-                expression: Expression::Ident("add".to_string()),
-            },
-            Statement::ExpressionStmt {
-                expression: Expression::Ident("asdf".to_string()),
-            },
-        ];
-        assert_eq!(expected, parser.parse_program()?);
-        Ok(())
-    }
+    test_parser!(
+        parse_ident => r#" foobar;
+        add;
+        asdf; "#;
+        Statement::ExpressionStmt {
+            expression: Expression::Ident("foobar".to_string()),
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Ident("add".to_string()),
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Ident("asdf".to_string()),
+        }
+    );
 
-    #[test]
-    fn parse_integer() -> error::Result<()> {
-        let input = r#"
-            5;
-            155;
-            32415;
-        "#;
-        let mut parser = Parser::new(Lexer::new(&input));
-        let expected = vec![
-            Statement::ExpressionStmt {
-                expression: Expression::Integer(5),
-            },
-            Statement::ExpressionStmt {
-                expression: Expression::Integer(155),
-            },
-            Statement::ExpressionStmt {
-                expression: Expression::Integer(32415),
-            },
-        ];
-        assert_eq!(expected, parser.parse_program()?);
-        Ok(())
-    }
+    test_parser!(
+        parse_integer => r#" 5;
+        155;
+        32415;"#;
+        Statement::ExpressionStmt {
+            expression: Expression::Integer(5),
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Integer(155),
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Integer(32415),
+        }
+    );
 
     #[test]
     fn parse_prefix() -> error::Result<()> {
@@ -444,4 +436,100 @@ mod test {
         assert_eq!(expected, parser.parse_program()?);
         Ok(())
     }
+
+    #[test]
+    fn parse_complex_infix() -> error::Result<()> {
+        let input = r#"
+            3 - - 2;
+            3 + 4 * - 5 == 3 * 1 + -4 / 5;
+        "#;
+        let mut parser = Parser::new(Lexer::new(&input));
+        let expected = vec![
+            Statement::ExpressionStmt {
+                expression: Expression::Infix {
+                    left: Box::new(Expression::Integer(3)),
+                    operator: Token::MINUS,
+                    right: Box::new(Expression::Prefix {
+                        operator: Token::MINUS,
+                        right: Box::new(Expression::Integer(2)),
+                    }),
+                },
+            },
+            Statement::ExpressionStmt {
+                expression: Expression::Infix {
+                    left: Box::new(Expression::Infix {
+                        left: Box::new(Expression::Integer(3)),
+                        operator: Token::PLUS,
+                        right: Box::new(Expression::Infix {
+                            left: Box::new(Expression::Integer(4)),
+                            operator: Token::ASTERISK,
+                            right: Box::new(Expression::Prefix {
+                                operator: Token::MINUS,
+                                right: Box::new(Expression::Integer(5)),
+                            }),
+                        }),
+                    }),
+                    operator: Token::EQ,
+                    right: Box::new(Expression::Infix {
+                        left: Box::new(Expression::Infix {
+                            left: Box::new(Expression::Integer(3)),
+                            operator: Token::ASTERISK,
+                            right: Box::new(Expression::Integer(1)),
+                        }),
+                        operator: Token::PLUS,
+                        right: Box::new(Expression::Infix {
+                            left: Box::new(Expression::Prefix {
+                                operator: Token::MINUS,
+                                right: Box::new(Expression::Integer(4)),
+                            }),
+                            operator: Token::SLASH,
+                            right: Box::new(Expression::Integer(5)),
+                        }),
+                    }),
+                },
+            },
+        ];
+        assert_eq!(expected, parser.parse_program()?);
+        Ok(())
+    }
+
+    test_parser!(
+        parse_bools => r#"true;
+        false;
+        let foobar = true;
+        let barfoo = false;
+        3 > 5 == false;
+        !true;"#;
+        Statement::ExpressionStmt {
+            expression: Expression::Boolean(true),
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Boolean(false),
+        },
+        Statement::LetStmt {
+            name: "foobar".to_string(),
+            value: Expression::NoneVal,
+        },
+        Statement::LetStmt {
+            name: "barfoo".to_string(),
+            value: Expression::NoneVal,
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Infix {
+                    left: Box::new(Expression::Integer(3)),
+                    operator: Token::GT,
+                    right: Box::new(Expression::Integer(5))
+                }),
+                operator: Token::EQ,
+                right: Box::new(Expression::Boolean(false))
+            }
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Prefix {
+                operator: Token::BANG,
+                right: Box::new(Expression::Boolean(true))
+            }
+        }
+    );
 }

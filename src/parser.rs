@@ -9,6 +9,7 @@ type Error = error::MonkeyErr;
 
 // AST Types
 pub type Program = Vec<Statement>;
+pub type BlockStmt = Vec<Statement>;
 type PrefixParseFn = fn(&mut Parser) -> error::Result<Expression>;
 type InfixParseFn = fn(&mut Parser, &Expression) -> error::Result<Expression>;
 
@@ -33,6 +34,11 @@ pub enum Expression {
         left: Box<Expression>,
         operator: Token,
         right: Box<Expression>,
+    },
+    IfExpr {
+        condition: Box<Expression>,
+        consequence: BlockStmt,
+        alternative: BlockStmt,
     },
 }
 
@@ -111,6 +117,8 @@ impl Parser {
             Token::FALSE => Some(Parser::parse_boolean),
             Token::BANG => Some(Parser::parse_prefix_expr),
             Token::MINUS => Some(Parser::parse_prefix_expr),
+            Token::LPAREN => Some(Parser::parse_grouped_expr),
+            Token::IF => Some(Parser::parse_if_expr),
             _ => None,
         }
     }
@@ -161,6 +169,52 @@ impl Parser {
 
         let right = Box::new(self.parse_expression(Precedence::PREFIX)?);
         Ok(Expression::Prefix { operator, right })
+    }
+
+    fn parse_grouped_expr(&mut self) -> error::Result<Expression> {
+        self.next_token();
+
+        let exp = self.parse_expression(Precedence::LOWEST)?;
+        expect_peek!(self => Token::RPAREN | Token::RPAREN);
+
+        Ok(exp)
+    }
+
+    fn parse_if_expr(&mut self) -> error::Result<Expression> {
+        expect_peek!(self => Token::LPAREN | Token::LPAREN);
+
+        self.next_token();
+        let condition = Box::new(self.parse_expression(Precedence::LOWEST)?);
+
+        expect_peek!(self => Token::RPAREN | Token::RPAREN);
+        expect_peek!(self => Token::LBRACE | Token::LBRACE);
+
+        let consequence = self.parse_block_statement()?;
+        let mut alternative: BlockStmt = Vec::new();
+
+        if self.take_token().1 == &Token::ELSE {
+            self.next_token();
+            expect_peek!(self => Token::LBRACE | Token::LBRACE);
+            alternative = self.parse_block_statement()?;
+        }
+
+        Ok(Expression::IfExpr {
+            condition,
+            consequence,
+            alternative,
+        })
+    }
+
+    fn parse_block_statement(&mut self) -> error::Result<BlockStmt> {
+        let mut stmts: BlockStmt = Vec::new();
+        self.next_token();
+
+        while self.take_token().0 != &Token::RBRACE && self.take_token().0 != &Token::EOF {
+            stmts.push(self.parse_statement()?);
+            self.next_token();
+        }
+
+        Ok(stmts)
     }
 
     fn parse_infix_expr(&mut self, left: &Expression) -> error::Result<Expression> {
@@ -224,7 +278,7 @@ impl Parser {
 
     fn parse_expression_stmt(&mut self) -> error::Result<Statement> {
         let expression = self.parse_expression(Precedence::LOWEST)?;
-        while self.take_token().0 != &Token::SEMICOLON {
+        if self.take_token().1 == &Token::SEMICOLON {
             self.next_token();
         }
         Ok(Statement::ExpressionStmt { expression })
@@ -234,7 +288,9 @@ impl Parser {
         let mut left_exp = if let Some(prefix) = self.prefix_fn() {
             prefix(self)?
         } else {
-            return Err(Error::PrefixNoneErr);
+            return Err(Error::PrefixNoneErr {
+                got: self.take_token().0.clone(),
+            });
         };
 
         while self.take_token().1 != &Token::SEMICOLON
@@ -244,7 +300,9 @@ impl Parser {
                 self.next_token();
                 infix(self, &left_exp)?
             } else {
-                return Err(Error::InfixNoneErr);
+                return Err(Error::InfixNoneErr {
+                    got: self.take_token().1.clone(),
+                });
             };
         }
 
@@ -265,9 +323,7 @@ mod test {
                 let input = $input;
                 let mut parser = Parser::new(Lexer::new(&input));
                 let mut expected: Vec<Statement> = Vec::new();
-                $(
-                    expected.push($expected);
-                )*
+                $(expected.push($expected);)*
                 assert_eq!(expected, parser.parse_program()?);
                 Ok(())
             }
@@ -337,161 +393,137 @@ mod test {
         }
     );
 
-    #[test]
-    fn parse_prefix() -> error::Result<()> {
-        let input = r#"
-            !5;
-            -15;
-        "#;
-        let mut parser = Parser::new(Lexer::new(&input));
-        let expected = vec![
-            Statement::ExpressionStmt {
-                expression: Expression::Prefix {
-                    operator: Token::BANG,
-                    right: Box::new(Expression::Integer(5)),
-                },
+    test_parser!(
+        parse_prefix => r#"!5;
+            -15;"#;
+        Statement::ExpressionStmt {
+            expression: Expression::Prefix {
+                operator: Token::BANG,
+                right: Box::new(Expression::Integer(5)),
             },
-            Statement::ExpressionStmt {
-                expression: Expression::Prefix {
-                    operator: Token::MINUS,
-                    right: Box::new(Expression::Integer(15)),
-                },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Prefix {
+                operator: Token::MINUS,
+                right: Box::new(Expression::Integer(15)),
             },
-        ];
-        assert_eq!(expected, parser.parse_program()?);
-        Ok(())
-    }
+        }
+    );
 
-    #[test]
-    fn parse_infix() -> error::Result<()> {
-        let input = r#"
-            5 + 6;
-            5 - 7;
-            5 * 8;
-            5 / 9;
-            5 > 10;
-            5 < 11;
-            5 == 12;
-            5 != 13;
-        "#;
-        let mut parser = Parser::new(Lexer::new(&input));
-        let expected = vec![
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
-                    left: Box::new(Expression::Integer(5)),
-                    operator: Token::PLUS,
-                    right: Box::new(Expression::Integer(6)),
-                },
+    test_parser!(
+        parse_infix => r#"5 + 6;
+        5 - 7;
+        5 * 8;
+        5 / 9;
+        5 > 10;
+        5 < 11;
+        5 == 12;
+        5 != 13; "#;
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Integer(5)),
+                operator: Token::PLUS,
+                right: Box::new(Expression::Integer(6)),
             },
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
-                    left: Box::new(Expression::Integer(5)),
-                    operator: Token::MINUS,
-                    right: Box::new(Expression::Integer(7)),
-                },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Integer(5)),
+                operator: Token::MINUS,
+                right: Box::new(Expression::Integer(7)),
             },
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
-                    left: Box::new(Expression::Integer(5)),
-                    operator: Token::ASTERISK,
-                    right: Box::new(Expression::Integer(8)),
-                },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Integer(5)),
+                operator: Token::ASTERISK,
+                right: Box::new(Expression::Integer(8)),
             },
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
-                    left: Box::new(Expression::Integer(5)),
-                    operator: Token::SLASH,
-                    right: Box::new(Expression::Integer(9)),
-                },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Integer(5)),
+                operator: Token::SLASH,
+                right: Box::new(Expression::Integer(9)),
             },
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
-                    left: Box::new(Expression::Integer(5)),
-                    operator: Token::GT,
-                    right: Box::new(Expression::Integer(10)),
-                },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Integer(5)),
+                operator: Token::GT,
+                right: Box::new(Expression::Integer(10)),
             },
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
-                    left: Box::new(Expression::Integer(5)),
-                    operator: Token::LT,
-                    right: Box::new(Expression::Integer(11)),
-                },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Integer(5)),
+                operator: Token::LT,
+                right: Box::new(Expression::Integer(11)),
             },
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
-                    left: Box::new(Expression::Integer(5)),
-                    operator: Token::EQ,
-                    right: Box::new(Expression::Integer(12)),
-                },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Integer(5)),
+                operator: Token::EQ,
+                right: Box::new(Expression::Integer(12)),
             },
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
-                    left: Box::new(Expression::Integer(5)),
-                    operator: Token::NOTEQ,
-                    right: Box::new(Expression::Integer(13)),
-                },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Integer(5)),
+                operator: Token::NOTEQ,
+                right: Box::new(Expression::Integer(13)),
             },
-        ];
-        assert_eq!(expected, parser.parse_program()?);
-        Ok(())
-    }
+        }
+    );
 
-    #[test]
-    fn parse_complex_infix() -> error::Result<()> {
-        let input = r#"
-            3 - - 2;
-            3 + 4 * - 5 == 3 * 1 + -4 / 5;
-        "#;
-        let mut parser = Parser::new(Lexer::new(&input));
-        let expected = vec![
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
+    test_parser!(
+        parse_complex_infix => r#"3 - - 2;
+        3 + 4 * - 5 == 3 * 1 + -4 / 5;"#;
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Integer(3)),
+                operator: Token::MINUS,
+                right: Box::new(Expression::Prefix {
+                    operator: Token::MINUS,
+                    right: Box::new(Expression::Integer(2)),
+                }),
+            },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Infix {
                     left: Box::new(Expression::Integer(3)),
-                    operator: Token::MINUS,
-                    right: Box::new(Expression::Prefix {
-                        operator: Token::MINUS,
-                        right: Box::new(Expression::Integer(2)),
-                    }),
-                },
-            },
-            Statement::ExpressionStmt {
-                expression: Expression::Infix {
-                    left: Box::new(Expression::Infix {
-                        left: Box::new(Expression::Integer(3)),
-                        operator: Token::PLUS,
-                        right: Box::new(Expression::Infix {
-                            left: Box::new(Expression::Integer(4)),
-                            operator: Token::ASTERISK,
-                            right: Box::new(Expression::Prefix {
-                                operator: Token::MINUS,
-                                right: Box::new(Expression::Integer(5)),
-                            }),
-                        }),
-                    }),
-                    operator: Token::EQ,
+                    operator: Token::PLUS,
                     right: Box::new(Expression::Infix {
-                        left: Box::new(Expression::Infix {
-                            left: Box::new(Expression::Integer(3)),
-                            operator: Token::ASTERISK,
-                            right: Box::new(Expression::Integer(1)),
-                        }),
-                        operator: Token::PLUS,
-                        right: Box::new(Expression::Infix {
-                            left: Box::new(Expression::Prefix {
-                                operator: Token::MINUS,
-                                right: Box::new(Expression::Integer(4)),
-                            }),
-                            operator: Token::SLASH,
+                        left: Box::new(Expression::Integer(4)),
+                        operator: Token::ASTERISK,
+                        right: Box::new(Expression::Prefix {
+                            operator: Token::MINUS,
                             right: Box::new(Expression::Integer(5)),
                         }),
                     }),
-                },
+                }),
+                operator: Token::EQ,
+                right: Box::new(Expression::Infix {
+                    left: Box::new(Expression::Infix {
+                        left: Box::new(Expression::Integer(3)),
+                        operator: Token::ASTERISK,
+                        right: Box::new(Expression::Integer(1)),
+                    }),
+                    operator: Token::PLUS,
+                    right: Box::new(Expression::Infix {
+                        left: Box::new(Expression::Prefix {
+                            operator: Token::MINUS,
+                            right: Box::new(Expression::Integer(4)),
+                        }),
+                        operator: Token::SLASH,
+                        right: Box::new(Expression::Integer(5)),
+                    }),
+                }),
             },
-        ];
-        assert_eq!(expected, parser.parse_program()?);
-        Ok(())
-    }
+        }
+    );
 
     test_parser!(
         parse_bools => r#"true;
@@ -529,6 +561,66 @@ mod test {
             expression: Expression::Prefix {
                 operator: Token::BANG,
                 right: Box::new(Expression::Boolean(true))
+            }
+        }
+    );
+
+    test_parser!(
+        parse_grouped => r#"-(5+6);
+        (2 + 3) * 4;"#;
+        Statement::ExpressionStmt {
+            expression: Expression::Prefix {
+                operator: Token::MINUS,
+                right: Box::new(Expression::Infix {
+                    left: Box::new(Expression::Integer(5)),
+                    operator: Token::PLUS,
+                    right: Box::new(Expression::Integer(6)),
+                })
+            }
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Infix {
+                    left: Box::new(Expression::Integer(2)),
+                    operator: Token::PLUS,
+                    right: Box::new(Expression::Integer(3)),
+                }),
+                operator: Token::ASTERISK,
+                right: Box::new(Expression::Integer(4)),
+            }
+        }
+    );
+
+    test_parser!(
+        parse_if_expr => r#"
+        if (x < y) { x };
+        "#;
+        Statement::ExpressionStmt {
+            expression: Expression::IfExpr {
+                condition: Box::new(Expression::Infix {
+                    left: Box::new(Expression::Ident("x".to_string())),
+                    operator: Token::LT,
+                    right: Box::new(Expression::Ident("y".to_string())),
+                }),
+                consequence: vec![Statement::ExpressionStmt { expression: Expression::Ident("x".to_string()) }],
+                alternative: vec![]
+            }
+        }
+    );
+
+    test_parser!(
+        parse_if_else_expr => r#"
+        if(foo!=bar){bar}else{foo};
+        "#;
+        Statement::ExpressionStmt {
+            expression: Expression::IfExpr {
+                condition: Box::new(Expression::Infix {
+                    left: Box::new(Expression::Ident("foo".to_string())),
+                    operator: Token::NOTEQ,
+                    right: Box::new(Expression::Ident("bar".to_string())),
+                }),
+                consequence: vec![Statement::ExpressionStmt { expression: Expression::Ident("bar".to_string()) }],
+                alternative: vec![Statement::ExpressionStmt { expression: Expression::Ident("foo".to_string()) }],
             }
         }
     );

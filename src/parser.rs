@@ -1,6 +1,3 @@
-#![allow(unused)]
-use std::collections::HashMap;
-
 use crate::error;
 use crate::lexer::Lexer;
 use crate::token::Token;
@@ -8,8 +5,8 @@ use crate::token::Token;
 type Error = error::MonkeyErr;
 
 // AST Types
-pub type Program = Vec<Statement>;
-pub type BlockStmt = Vec<Statement>;
+type Program = Vec<Statement>;
+type BlockStmt = Vec<Statement>;
 type PrefixParseFn = fn(&mut Parser) -> error::Result<Expression>;
 type InfixParseFn = fn(&mut Parser, &Expression) -> error::Result<Expression>;
 
@@ -22,7 +19,6 @@ pub enum Statement {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
-    NoneVal,
     Ident(String),
     Integer(i64),
     Boolean(bool),
@@ -51,7 +47,7 @@ pub enum Expression {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub enum Precedence {
+enum Precedence {
     LOWEST,
     EQUALS,
     LESSGREATER,
@@ -116,6 +112,15 @@ impl Parser {
     pub fn new(l: Lexer<'_>) -> Self {
         let l: Vec<Token> = l.collect();
         Self { l, cur_position: 0 }
+    }
+
+    pub fn parse_program(&mut self) -> error::Result<Program> {
+        let mut program: Program = vec![];
+        while self.take_token().0 != &Token::EOF {
+            program.push(self.parse_statement()?);
+            self.next_token();
+        }
+        Ok(program)
     }
 
     fn prefix_fn(&mut self) -> Option<PrefixParseFn> {
@@ -299,15 +304,6 @@ impl Parser {
             operator,
             right,
         })
-    }
-
-    fn parse_program(&mut self) -> error::Result<Program> {
-        let mut program: Program = vec![];
-        while self.take_token().0 != &Token::EOF {
-            program.push(self.parse_statement()?);
-            self.next_token();
-        }
-        Ok(program)
     }
 
     fn parse_statement(&mut self) -> error::Result<Statement> {

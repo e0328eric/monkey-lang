@@ -51,11 +51,11 @@ impl Token {
         }
     }
 
-    pub fn unwrap_string(&self) -> String {
+    pub fn unwrap_string(&self) -> crate::error::Result<String> {
         if let Token::IDENT(ref s) = self {
-            s.to_owned()
+            Ok(s.to_owned())
         } else {
-            panic!("Cannot take string from IDENT");
+            Err(crate::error::MonkeyErr::CannotConvertStringErr { got: self.clone() })
         }
     }
 

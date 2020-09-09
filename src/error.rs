@@ -4,6 +4,7 @@ use crate::token::Token;
 
 pub enum MonkeyErr {
     IOErr(std::io::Error),
+    CannotConvertStringErr { got: Token },
     PrefixNoneErr { got: Token },
     InfixNoneErr { got: Token },
     ParseExprErr { expected: String, got: Token },
@@ -14,6 +15,9 @@ impl Display for MonkeyErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MonkeyErr::IOErr(ref e) => Display::fmt(e, f),
+            MonkeyErr::CannotConvertStringErr { got } => {
+                write!(f, "Cannot take string from {}", got.take_tok_name())
+            }
             MonkeyErr::PrefixNoneErr { got } => write!(
                 f,
                 "Cannot take prefix function for {} found",

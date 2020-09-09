@@ -1,9 +1,9 @@
 #![warn(rust_2018_idioms)]
 
+mod error;
 mod lexer;
 mod parser;
 mod token;
-mod error;
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;

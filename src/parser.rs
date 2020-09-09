@@ -40,6 +40,14 @@ pub enum Expression {
         consequence: BlockStmt,
         alternative: BlockStmt,
     },
+    Function {
+        parameter: Vec<String>,
+        body: BlockStmt,
+    },
+    Call {
+        function: Box<Expression>,
+        arguments: Vec<Expression>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -63,6 +71,7 @@ fn take_precedence(tok: &Token) -> Precedence {
         Token::MINUS => Precedence::SUM,
         Token::ASTERISK => Precedence::PRODUCT,
         Token::SLASH => Precedence::PRODUCT,
+        Token::LPAREN => Precedence::CALL,
         _ => Precedence::LOWEST,
     }
 }
@@ -119,6 +128,7 @@ impl Parser {
             Token::MINUS => Some(Parser::parse_prefix_expr),
             Token::LPAREN => Some(Parser::parse_grouped_expr),
             Token::IF => Some(Parser::parse_if_expr),
+            Token::FUNCTION => Some(Parser::parse_function_literal),
             _ => None,
         }
     }
@@ -133,6 +143,7 @@ impl Parser {
             Token::NOTEQ => Some(Parser::parse_infix_expr),
             Token::LT => Some(Parser::parse_infix_expr),
             Token::GT => Some(Parser::parse_infix_expr),
+            Token::LPAREN => Some(Parser::parse_call_expr),
             _ => None,
         }
     }
@@ -205,6 +216,36 @@ impl Parser {
         })
     }
 
+    fn parse_function_literal(&mut self) -> error::Result<Expression> {
+        expect_peek!(self => Token::LPAREN | Token::LPAREN);
+        let parameter = self.parse_function_parameters()?;
+        expect_peek!(self => Token::LBRACE | Token::LBRACE);
+        let body = self.parse_block_statement()?;
+
+        Ok(Expression::Function { parameter, body })
+    }
+
+    fn parse_function_parameters(&mut self) -> error::Result<Vec<String>> {
+        let mut identifiers: Vec<_> = Vec::new();
+        if self.take_token().1 == &Token::RPAREN {
+            self.next_token();
+            return Ok(identifiers);
+        }
+
+        self.next_token();
+        identifiers.push(self.take_token().0.unwrap_string()?);
+
+        while self.take_token().1 == &Token::COMMA {
+            self.next_token();
+            self.next_token();
+            identifiers.push(self.take_token().0.unwrap_string()?);
+        }
+
+        expect_peek!(self => Token::RPAREN | Token::RPAREN);
+
+        Ok(identifiers)
+    }
+
     fn parse_block_statement(&mut self) -> error::Result<BlockStmt> {
         let mut stmts: BlockStmt = Vec::new();
         self.next_token();
@@ -215,6 +256,36 @@ impl Parser {
         }
 
         Ok(stmts)
+    }
+
+    fn parse_call_expr(&mut self, fnt: &Expression) -> error::Result<Expression> {
+        let arguments = self.parse_call_arguments()?;
+        Ok(Expression::Call {
+            function: Box::new(fnt.clone()),
+            arguments,
+        })
+    }
+
+    fn parse_call_arguments(&mut self) -> error::Result<Vec<Expression>> {
+        let mut args: Vec<Expression> = Vec::new();
+
+        if self.take_token().1 == &Token::RPAREN {
+            self.next_token();
+            return Ok(args);
+        }
+
+        self.next_token();
+        args.push(self.parse_expression(Precedence::LOWEST)?);
+
+        while self.take_token().1 == &Token::COMMA {
+            self.next_token();
+            self.next_token();
+            args.push(self.parse_expression(Precedence::LOWEST)?);
+        }
+
+        expect_peek!(self => Token::RPAREN | Token::RPAREN);
+
+        Ok(args)
     }
 
     fn parse_infix_expr(&mut self, left: &Expression) -> error::Result<Expression> {
@@ -249,31 +320,28 @@ impl Parser {
 
     fn parse_let_stmt(&mut self) -> error::Result<Statement> {
         expect_peek!(self => Token::IDENT(_) | Token::IDENT(String::new()));
-        let name = self.take_token().0.unwrap_string();
+        let name = self.take_token().0.unwrap_string()?;
         expect_peek!(self => Token::ASSIGN | Token::ASSIGN);
+        self.next_token();
 
-        // TODO: We're skipping the expressions until we
-        // encounter a semicolon
+        let value = self.parse_expression(Precedence::LOWEST)?;
+
         while self.take_token().0 != &Token::SEMICOLON {
             self.next_token();
         }
 
-        Ok(Statement::LetStmt {
-            name,
-            value: Expression::NoneVal,
-        })
+        Ok(Statement::LetStmt { name, value })
     }
 
     fn parse_return_stmt(&mut self) -> error::Result<Statement> {
         self.next_token();
-        // TODO: We're skipping the expressions until we
-        // encounter a semicolon
+
+        let value = self.parse_expression(Precedence::LOWEST)?;
+
         while self.take_token().0 != &Token::SEMICOLON {
             self.next_token();
         }
-        Ok(Statement::ReturnStmt {
-            value: Expression::NoneVal,
-        })
+        Ok(Statement::ReturnStmt { value })
     }
 
     fn parse_expression_stmt(&mut self) -> error::Result<Statement> {
@@ -336,15 +404,15 @@ mod test {
         let foobar = 838383;"#;
         Statement::LetStmt {
             name: "x".to_string(),
-            value: Expression::NoneVal,
+            value: Expression::Integer(5),
         },
         Statement::LetStmt {
             name: "y".to_string(),
-            value: Expression::NoneVal,
+            value: Expression::Integer(10),
         },
         Statement::LetStmt {
             name: "foobar".to_string(),
-            value: Expression::NoneVal,
+            value: Expression::Integer(838383),
         }
     );
 
@@ -353,13 +421,13 @@ mod test {
         return 10;
         return 993322;"#;
         Statement::ReturnStmt {
-            value: Expression::NoneVal,
+            value: Expression::Integer(5),
         },
         Statement::ReturnStmt {
-            value: Expression::NoneVal,
+            value: Expression::Integer(10),
         },
         Statement::ReturnStmt {
-            value: Expression::NoneVal,
+            value: Expression::Integer(993322),
         }
     );
 
@@ -540,11 +608,11 @@ mod test {
         },
         Statement::LetStmt {
             name: "foobar".to_string(),
-            value: Expression::NoneVal,
+            value: Expression::Boolean(true),
         },
         Statement::LetStmt {
             name: "barfoo".to_string(),
-            value: Expression::NoneVal,
+            value: Expression::Boolean(false),
         },
         Statement::ExpressionStmt {
             expression: Expression::Infix {
@@ -621,6 +689,62 @@ mod test {
                 }),
                 consequence: vec![Statement::ExpressionStmt { expression: Expression::Ident("bar".to_string()) }],
                 alternative: vec![Statement::ExpressionStmt { expression: Expression::Ident("foo".to_string()) }],
+            }
+        }
+    );
+
+    test_parser!(
+        parse_function_literal => r#"
+        fn(x, y) { x + y; };
+        fn() {};
+        fn(x, y, z) {};
+        "#;
+        Statement::ExpressionStmt {
+            expression: Expression::Function {
+                parameter: vec!["x".to_string(), "y".to_string()],
+                body: vec![
+                    Statement::ExpressionStmt {
+                    expression: Expression::Infix {
+                    left: Box::new(Expression::Ident("x".to_string())),
+                    operator: Token::PLUS,
+                    right: Box::new(Expression::Ident("y".to_string())),
+                }}]
+            }
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Function {
+                parameter: vec![],
+                body: vec![]
+            }
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Function {
+                parameter: vec!["x".to_string(), "y".to_string(), "z".to_string()],
+                body: vec![]
+            }
+        }
+    );
+
+    test_parser!(
+        parse_call_expr => r#"
+        add(1, 2 * 3, 4 + 5);
+        "#;
+        Statement::ExpressionStmt {
+            expression: Expression::Call {
+                function: Box::new(Expression::Ident("add".to_string())),
+                arguments: vec![
+                    Expression::Integer(1),
+                    Expression::Infix {
+                        left: Box::new(Expression::Integer(2)),
+                        operator: Token::ASTERISK,
+                        right: Box::new(Expression::Integer(3))
+                    },
+                    Expression::Infix {
+                        left: Box::new(Expression::Integer(4)),
+                        operator: Token::PLUS,
+                        right: Box::new(Expression::Integer(5))
+                    }
+                ]
             }
         }
     );

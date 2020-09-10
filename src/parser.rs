@@ -322,7 +322,7 @@ impl Parser {
 
         let value = self.parse_expression(Precedence::LOWEST)?;
 
-        while self.take_token().0 != &Token::SEMICOLON {
+        if self.take_token().0 != &Token::SEMICOLON {
             self.next_token();
         }
 
@@ -334,7 +334,7 @@ impl Parser {
 
         let value = self.parse_expression(Precedence::LOWEST)?;
 
-        while self.take_token().0 != &Token::SEMICOLON {
+        if self.take_token().0 != &Token::SEMICOLON {
             self.next_token();
         }
         Ok(Statement::ReturnStmt { value })

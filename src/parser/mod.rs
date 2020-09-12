@@ -1,76 +1,13 @@
+pub mod ast;
+
 use crate::error;
+use crate::lexer::token::Token;
 use crate::lexer::Lexer;
-use crate::token::Token;
+use crate::parser::ast::{BlockStmt, Expression, Precedence, Program, Statement};
 
 type Error = error::MonkeyErr;
-
-// AST Types
-type Program = Vec<Statement>;
-type BlockStmt = Vec<Statement>;
 type PrefixParseFn = fn(&mut Parser) -> error::Result<Expression>;
 type InfixParseFn = fn(&mut Parser, &Expression) -> error::Result<Expression>;
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Statement {
-    LetStmt { name: String, value: Expression },
-    ReturnStmt { value: Expression },
-    ExpressionStmt { expression: Expression },
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Expression {
-    Ident(String),
-    Integer(i64),
-    Boolean(bool),
-    Prefix {
-        operator: Token,
-        right: Box<Expression>,
-    },
-    Infix {
-        left: Box<Expression>,
-        operator: Token,
-        right: Box<Expression>,
-    },
-    IfExpr {
-        condition: Box<Expression>,
-        consequence: BlockStmt,
-        alternative: BlockStmt,
-    },
-    Function {
-        parameter: Vec<String>,
-        body: BlockStmt,
-    },
-    Call {
-        function: Box<Expression>,
-        arguments: Vec<Expression>,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-enum Precedence {
-    LOWEST,
-    EQUALS,
-    LESSGREATER,
-    SUM,
-    PRODUCT,
-    PREFIX,
-    CALL,
-}
-
-fn take_precedence(tok: &Token) -> Precedence {
-    match tok {
-        Token::EQ => Precedence::EQUALS,
-        Token::NOTEQ => Precedence::EQUALS,
-        Token::LT => Precedence::LESSGREATER,
-        Token::GT => Precedence::LESSGREATER,
-        Token::PLUS => Precedence::SUM,
-        Token::MINUS => Precedence::SUM,
-        Token::ASTERISK => Precedence::PRODUCT,
-        Token::SLASH => Precedence::PRODUCT,
-        Token::LPAREN => Precedence::CALL,
-        _ => Precedence::LOWEST,
-    }
-}
 
 pub struct Parser {
     l: Vec<Token>,
@@ -295,7 +232,7 @@ impl Parser {
 
     fn parse_infix_expr(&mut self, left: &Expression) -> error::Result<Expression> {
         let operator = self.take_token().0.clone();
-        let precedence = take_precedence(self.take_token().0);
+        let precedence = Precedence::take_precedence(self.take_token().0);
         self.next_token();
 
         let right = Box::new(self.parse_expression(precedence)?);
@@ -358,7 +295,7 @@ impl Parser {
         };
 
         while self.take_token().1 != &Token::SEMICOLON
-            && prece < take_precedence(self.take_token().1)
+            && prece < Precedence::take_precedence(self.take_token().1)
         {
             left_exp = if let Some(infix) = self.infix_fn() {
                 self.next_token();

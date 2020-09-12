@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug, Display};
 
-use crate::token::Token;
+use crate::lexer::token::Token;
 
 pub enum MonkeyErr {
     IOErr(std::io::Error),

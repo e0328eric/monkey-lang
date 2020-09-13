@@ -7,9 +7,20 @@ const TRUE: Object = Object::Boolean { value: true };
 const FALSE: Object = Object::Boolean { value: false };
 const NULL: Object = Object::Null;
 
+pub fn eval_program(stmts: Vec<Statement>) -> Object {
+    let mut result: Object = NULL;
+    for statement in stmts {
+        result = eval(statement);
+        if let Object::ReturnValue { value } = result {
+            return *value;
+        }
+    }
+    result
+}
+
 pub fn eval(node: Statement) -> Object {
-    if let Statement::ExpressionStmt { expression } = node {
-        match expression {
+    match node {
+        Statement::ExpressionStmt { expression } => match expression {
             Expression::Integer(value) => Object::Integer { value },
             Expression::Boolean(value) => {
                 if value {
@@ -27,11 +38,29 @@ pub fn eval(node: Statement) -> Object {
                 operator,
                 right,
             } => eval_infix_expr(operator, eval(left.into()), eval(right.into())),
+            Expression::IfExpr {
+                condition,
+                consequence,
+                alternative,
+            } => eval_if_expr(eval(condition.into()), consequence, alternative),
             _ => NULL,
-        }
-    } else {
-        NULL
+        },
+        Statement::ReturnStmt { value } => Object::ReturnValue {
+            value: Box::new(eval(value.into())),
+        },
+        _ => NULL,
     }
+}
+
+fn eval_stmts(block: BlockStmt) -> Object {
+    let mut result: Object = NULL;
+    for statement in block {
+        result = eval(statement);
+        if let Object::ReturnValue { .. } = result {
+            return result;
+        }
+    }
+    result
 }
 
 fn eval_prefix_expr(operator: Token, right: Object) -> Object {
@@ -64,6 +93,16 @@ fn eval_infix_expr(operator: Token, left: Object, right: Object) -> Object {
             }
             _ => NULL,
         },
+    }
+}
+
+fn eval_if_expr(cond: Object, consq: BlockStmt, alter: BlockStmt) -> Object {
+    if is_truthy(&cond) {
+        eval_stmts(consq)
+    } else if !alter.is_empty() {
+        eval_stmts(alter)
+    } else {
+        NULL
     }
 }
 
@@ -111,6 +150,13 @@ fn eval_integer_infix_expr(operator: Token, left: i64, right: i64) -> Object {
             value: left != right,
         },
         _ => NULL,
+    }
+}
+
+fn is_truthy(obj: &Object) -> bool {
+    match *obj {
+        NULL | FALSE => false,
+        _ => true,
     }
 }
 
@@ -255,6 +301,72 @@ mod test {
                 Object::Boolean { value: true },
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn eval_if_else_expr() -> error::Result<()> {
+        let input: Vec<_> = Parser::new(Lexer::new(
+            r#"
+            if (true) { 10 };
+            if (false) { 10 };
+            if (1) { 10 };
+            if (1 < 2) { 10 };
+            if (1 > 2) { 10 };
+            if (1 > 2) { 10 } else { 20 };
+            if (1 < 2) { 10 } else { 20 };
+            "#,
+        ))
+        .parse_program()?
+        .into_iter()
+        .map(eval)
+        .collect();
+        assert_eq!(
+            input,
+            vec![
+                Object::Integer { value: 10 },
+                NULL,
+                Object::Integer { value: 10 },
+                Object::Integer { value: 10 },
+                NULL,
+                Object::Integer { value: 20 },
+                Object::Integer { value: 10 },
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn eval_return_expr() -> error::Result<()> {
+        let input = eval_program(
+            Parser::new(Lexer::new(
+                r#"
+            9; return 2 * 5; 8;
+            "#,
+            ))
+            .parse_program()?,
+        );
+        assert_eq!(input, Object::Integer { value: 10 });
+        Ok(())
+    }
+
+    #[test]
+    fn eval_nested_block_expr() -> error::Result<()> {
+        let input = eval_program(
+            Parser::new(Lexer::new(
+                r#"
+            if (10 > 1) {
+                if (12 > 2) {
+                    return 10;
+                }
+
+                return 1;
+            }
+            "#,
+            ))
+            .parse_program()?,
+        );
+        assert_eq!(input, Object::Integer { value: 10 });
         Ok(())
     }
 }

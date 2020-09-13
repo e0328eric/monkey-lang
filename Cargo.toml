@@ -5,4 +5,4 @@ authors = ["Sungbae Jeong <almagest0328@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-rustyline = "6.2.0"
+rustyline = "6.2"

@@ -45,6 +45,12 @@ impl From<Box<Expression>> for Statement {
     }
 }
 
+impl From<Expression> for Statement {
+    fn from(expr: Expression) -> Self {
+        Self::ExpressionStmt { expression: expr }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum Precedence {
     LOWEST,

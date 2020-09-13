@@ -1,3 +1,7 @@
+use crate::error;
+
+type Error = error::MonkeyErr;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Token {
     ILLIGAL,
@@ -51,11 +55,11 @@ impl Token {
         }
     }
 
-    pub fn unwrap_string(&self) -> crate::error::Result<String> {
+    pub fn unwrap_string(&self) -> error::Result<String> {
         if let Token::IDENT(ref s) = self {
             Ok(s.to_owned())
         } else {
-            Err(crate::error::MonkeyErr::CannotConvertStringErr { got: self.clone() })
+            Err(Error::CannotConvertStringErr { got: self.clone() })
         }
     }
 
@@ -64,6 +68,21 @@ impl Token {
             Token::IDENT(_) => "IDENT".to_string(),
             Token::INT(_) => "INT".to_string(),
             _ => format!("{:?}", self),
+        }
+    }
+
+    pub fn to_symbol(&self) -> crate::error::Result<String> {
+        match self {
+            Token::PLUS => Ok("+".to_string()),
+            Token::MINUS => Ok("+".to_string()),
+            Token::ASTERISK => Ok("+".to_string()),
+            Token::SLASH => Ok("+".to_string()),
+            Token::LT => Ok("+".to_string()),
+            Token::GT => Ok("+".to_string()),
+            Token::EQ => Ok("+".to_string()),
+            Token::NOTEQ => Ok("+".to_string()),
+            Token::BANG => Ok("+".to_string()),
+            _ => Err(Error::CannotConvertSymbolErr { got: self.clone() }),
         }
     }
 }

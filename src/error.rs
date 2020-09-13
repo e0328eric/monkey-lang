@@ -4,7 +4,9 @@ use crate::lexer::token::Token;
 
 pub enum MonkeyErr {
     IOErr(std::io::Error),
+    FmtErr(fmt::Error),
     CannotConvertStringErr { got: Token },
+    CannotConvertSymbolErr { got: Token },
     PrefixNoneErr { got: Token },
     InfixNoneErr { got: Token },
     ParseExprErr { expected: String, got: Token },
@@ -15,8 +17,12 @@ impl Display for MonkeyErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MonkeyErr::IOErr(ref e) => Display::fmt(e, f),
+            MonkeyErr::FmtErr(ref e) => Display::fmt(e, f),
             MonkeyErr::CannotConvertStringErr { got } => {
                 write!(f, "Cannot take string from {}", got.take_tok_name())
+            }
+            MonkeyErr::CannotConvertSymbolErr { got } => {
+                write!(f, "Cannot convery symbol from {}", got.take_tok_name())
             }
             MonkeyErr::PrefixNoneErr { got } => write!(
                 f,
@@ -53,6 +59,12 @@ impl Debug for MonkeyErr {
 impl From<std::io::Error> for MonkeyErr {
     fn from(e: std::io::Error) -> Self {
         MonkeyErr::IOErr(e)
+    }
+}
+
+impl From<fmt::Error> for MonkeyErr {
+    fn from(e: fmt::Error) -> Self {
+        MonkeyErr::FmtErr(e)
     }
 }
 

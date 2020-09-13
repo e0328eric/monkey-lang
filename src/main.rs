@@ -18,10 +18,7 @@ fn main() -> error::Result<()> {
         match readline {
             Ok(line) => {
                 let parsed = Parser::new(Lexer::new(&line)).parse_program()?;
-                for stmt in parsed {
-                    let obj = evaluator::eval(stmt);
-                    println!("{}", obj);
-                }
+                println!("{}", evaluator::eval_program(parsed));
             }
             Err(ReadlineError::Interrupted) => break,
             Err(ReadlineError::Eof) => break,

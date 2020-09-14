@@ -1,3 +1,6 @@
+mod evalerror;
+
+use crate::evaluator::evalerror::EvalError;
 use crate::lexer::token::Token;
 use crate::object::Object;
 use crate::parser::ast::*;
@@ -7,149 +10,149 @@ const TRUE: Object = Object::Boolean { value: true };
 const FALSE: Object = Object::Boolean { value: false };
 const NULL: Object = Object::Null;
 
-pub fn eval_program(stmts: Vec<Statement>) -> Object {
+pub fn eval_program(stmts: Vec<Statement>) -> evalerror::Result<Object> {
     let mut result: Object = NULL;
     for statement in stmts {
-        result = eval(statement);
+        result = eval(statement)?;
         if let Object::ReturnValue { value } = result {
-            return *value;
+            return Ok(*value);
         }
     }
-    result
+    Ok(result)
 }
 
-pub fn eval(node: Statement) -> Object {
+pub fn eval(node: Statement) -> evalerror::Result<Object> {
     match node {
         Statement::ExpressionStmt { expression } => match expression {
-            Expression::Integer(value) => Object::Integer { value },
+            Expression::Integer(value) => Ok(Object::Integer { value }),
             Expression::Boolean(value) => {
                 if value {
-                    TRUE
+                    Ok(TRUE)
                 } else {
-                    FALSE
+                    Ok(FALSE)
                 }
             }
             Expression::Prefix { operator, right } => {
-                eval_prefix_expr(operator, eval(right.into()))
+                eval_prefix_expr(operator, eval(right.into())?)
             }
 
             Expression::Infix {
                 left,
                 operator,
                 right,
-            } => eval_infix_expr(operator, eval(left.into()), eval(right.into())),
+            } => eval_infix_expr(operator, eval(left.into())?, eval(right.into())?),
             Expression::IfExpr {
                 condition,
                 consequence,
                 alternative,
-            } => eval_if_expr(eval(condition.into()), consequence, alternative),
-            _ => NULL,
+            } => eval_if_expr(eval(condition.into())?, consequence, alternative),
+            _ => Ok(NULL),
         },
-        Statement::ReturnStmt { value } => Object::ReturnValue {
-            value: Box::new(eval(value.into())),
-        },
-        _ => NULL,
+        Statement::ReturnStmt { value } => Ok(Object::ReturnValue {
+            value: Box::new(eval(value.into())?),
+        }),
+        _ => Ok(NULL),
     }
 }
 
-fn eval_stmts(block: BlockStmt) -> Object {
+fn eval_stmts(block: BlockStmt) -> evalerror::Result<Object> {
     let mut result: Object = NULL;
     for statement in block {
-        result = eval(statement);
+        result = eval(statement)?;
         if let Object::ReturnValue { .. } = result {
-            return result;
+            return Ok(result);
         }
     }
-    result
+    Ok(result)
 }
 
-fn eval_prefix_expr(operator: Token, right: Object) -> Object {
+fn eval_prefix_expr(operator: Token, right: Object) -> evalerror::Result<Object> {
     match operator {
         Token::BANG => eval_bang_operator_expr(right),
         Token::MINUS => eval_minus_operator_expr(right),
-        _ => NULL,
+        _ => Err(EvalError::UnknownPrefix { operator, right }),
     }
 }
 
-fn eval_infix_expr(operator: Token, left: Object, right: Object) -> Object {
+fn eval_infix_expr(operator: Token, left: Object, right: Object) -> evalerror::Result<Object> {
     match (&left, &right) {
         (&Object::Integer { value: left }, &Object::Integer { value: right }) => {
             eval_integer_infix_expr(operator, left, right)
         }
-        _ => match operator {
+        _ if Object::is_same_type(&left, &right) => match operator {
             Token::EQ => {
                 if left == right {
-                    TRUE
+                    Ok(TRUE)
                 } else {
-                    FALSE
+                    Ok(FALSE)
                 }
             }
             Token::NOTEQ => {
                 if left != right {
-                    TRUE
+                    Ok(TRUE)
                 } else {
-                    FALSE
+                    Ok(FALSE)
                 }
             }
-            _ => NULL,
+            _ => Err(EvalError::UnknownInfix {
+                left,
+                operator,
+                right,
+            }),
         },
+        _ => Err(EvalError::TypeMismatch {
+            left,
+            operator,
+            right,
+        }),
     }
 }
 
-fn eval_if_expr(cond: Object, consq: BlockStmt, alter: BlockStmt) -> Object {
+fn eval_if_expr(cond: Object, consq: BlockStmt, alter: BlockStmt) -> evalerror::Result<Object> {
     if is_truthy(&cond) {
         eval_stmts(consq)
     } else if !alter.is_empty() {
         eval_stmts(alter)
     } else {
-        NULL
+        Ok(NULL)
     }
 }
 
-fn eval_bang_operator_expr(right: Object) -> Object {
+fn eval_bang_operator_expr(right: Object) -> evalerror::Result<Object> {
     match right {
-        TRUE => FALSE,
-        FALSE => TRUE,
-        NULL => TRUE, // This means that NULL is falsty
-        _ => FALSE,   // and the defalut is truthy
+        TRUE => Ok(FALSE),
+        FALSE => Ok(TRUE),
+        NULL => Ok(TRUE), // This means that NULL is falsty
+        _ => Ok(FALSE),   // and the defalut is truthy
     }
 }
 
-fn eval_minus_operator_expr(right: Object) -> Object {
+fn eval_minus_operator_expr(right: Object) -> evalerror::Result<Object> {
     if let Object::Integer { value } = right {
-        Object::Integer { value: -value }
+        Ok(Object::Integer { value: -value })
     } else {
-        NULL
+        Err(EvalError::UnknownPrefix {
+            operator: Token::MINUS,
+            right,
+        })
     }
 }
 
-fn eval_integer_infix_expr(operator: Token, left: i64, right: i64) -> Object {
+fn eval_integer_infix_expr(operator: Token, lf: i64, rt: i64) -> evalerror::Result<Object> {
     match operator {
-        Token::PLUS => Object::Integer {
-            value: left + right,
-        },
-        Token::MINUS => Object::Integer {
-            value: left - right,
-        },
-        Token::ASTERISK => Object::Integer {
-            value: left * right,
-        },
-        Token::SLASH => Object::Integer {
-            value: left / right,
-        },
-        Token::LT => Object::Boolean {
-            value: left < right,
-        },
-        Token::GT => Object::Boolean {
-            value: left > right,
-        },
-        Token::EQ => Object::Boolean {
-            value: left == right,
-        },
-        Token::NOTEQ => Object::Boolean {
-            value: left != right,
-        },
-        _ => NULL,
+        Token::PLUS => Ok(Object::Integer { value: lf + rt }),
+        Token::MINUS => Ok(Object::Integer { value: lf - rt }),
+        Token::ASTERISK => Ok(Object::Integer { value: lf * rt }),
+        Token::SLASH => Ok(Object::Integer { value: lf / rt }),
+        Token::LT => Ok(Object::Boolean { value: lf < rt }),
+        Token::GT => Ok(Object::Boolean { value: lf > rt }),
+        Token::EQ => Ok(Object::Boolean { value: lf == rt }),
+        Token::NOTEQ => Ok(Object::Boolean { value: lf != rt }),
+        _ => Err(EvalError::UnknownInfix {
+            left: Object::Integer { value: lf },
+            operator,
+            right: Object::Integer { value: rt },
+        }),
     }
 }
 
@@ -188,7 +191,7 @@ mod test {
         ))
         .parse_program()?
         .into_iter()
-        .map(eval)
+        .map(|x| eval(x).unwrap())
         .collect();
         assert_eq!(
             input,
@@ -236,7 +239,7 @@ mod test {
         ))
         .parse_program()?
         .into_iter()
-        .map(eval)
+        .map(|x| eval(x).unwrap())
         .collect();
         assert_eq!(
             input,
@@ -267,7 +270,7 @@ mod test {
         let input: Vec<_> = Parser::new(Lexer::new("7; true; 15; false; false; 324;"))
             .parse_program()?
             .into_iter()
-            .map(eval)
+            .map(|x| eval(x).unwrap())
             .collect();
         assert_eq!(
             input,
@@ -288,7 +291,7 @@ mod test {
         let input: Vec<_> = Parser::new(Lexer::new("!true; !false !5; !!true; !!false; !!5;"))
             .parse_program()?
             .into_iter()
-            .map(eval)
+            .map(|x| eval(x).unwrap())
             .collect();
         assert_eq!(
             input,
@@ -319,7 +322,7 @@ mod test {
         ))
         .parse_program()?
         .into_iter()
-        .map(eval)
+        .map(|x| eval(x).unwrap())
         .collect();
         assert_eq!(
             input,
@@ -345,7 +348,8 @@ mod test {
             "#,
             ))
             .parse_program()?,
-        );
+        )
+        .unwrap();
         assert_eq!(input, Object::Integer { value: 10 });
         Ok(())
     }
@@ -365,7 +369,8 @@ mod test {
             "#,
             ))
             .parse_program()?,
-        );
+        )
+        .unwrap();
         assert_eq!(input, Object::Integer { value: 10 });
         Ok(())
     }

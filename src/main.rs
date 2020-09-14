@@ -17,8 +17,17 @@ fn main() -> error::Result<()> {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
-                let parsed = Parser::new(Lexer::new(&line)).parse_program()?;
-                println!("{}", evaluator::eval_program(parsed));
+                let parsed = Parser::new(Lexer::new(&line)).parse_program();
+                if let Err(error) = parsed {
+                    eprintln!("{}", error);
+                } else {
+                    let objects = evaluator::eval_program(parsed.unwrap());
+                    if let Err(error) = objects {
+                        eprintln!("{}", error);
+                    } else {
+                        println!("{}", objects.unwrap());
+                    }
+                }
             }
             Err(ReadlineError::Interrupted) => break,
             Err(ReadlineError::Eof) => break,

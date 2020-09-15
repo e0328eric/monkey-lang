@@ -32,7 +32,7 @@ impl Parser {
         self.cur_position += 1;
     }
 
-    fn take_token(&self) -> (&Token, &Token) {
+    fn take_token(&self) -> (&Token, &Token, &Token) {
         let cur_tok = if self.cur_position >= self.l.len() {
             &Token::EOF
         } else {
@@ -43,7 +43,12 @@ impl Parser {
         } else {
             &self.l[self.cur_position + 1]
         };
-        (cur_tok, peek_tok)
+        let twopeek_tok = if self.cur_position >= self.l.len() - 2 {
+            &Token::EOF
+        } else {
+            &self.l[self.cur_position + 2]
+        };
+        (cur_tok, peek_tok, twopeek_tok)
     }
 
     pub fn new(l: Lexer<'_>) -> Self {
@@ -63,7 +68,8 @@ impl Parser {
     fn prefix_fn(&mut self) -> Option<PrefixParseFn> {
         match self.take_token().0 {
             Token::IDENT(_) => Some(Parser::parse_identifier),
-            Token::INT(_) => Some(Parser::parse_integer),
+            Token::INT(_) => Some(Parser::parse_number),
+            Token::IMEGINARY(_) => Some(Parser::parse_number),
             Token::TRUE => Some(Parser::parse_boolean),
             Token::FALSE => Some(Parser::parse_boolean),
             Token::BANG => Some(Parser::parse_prefix_expr),
@@ -92,7 +98,7 @@ impl Parser {
     }
 
     fn parse_identifier(&mut self) -> error::Result<Expression> {
-        if let Token::IDENT(ref i) = self.take_token().0 {
+        if let Token::IDENT(i) = self.take_token().0 {
             Ok(Expression::Ident(i.to_string()))
         } else {
             Err(Error::ParseExprErr {
@@ -102,15 +108,35 @@ impl Parser {
         }
     }
 
-    fn parse_integer(&mut self) -> error::Result<Expression> {
-        if let Token::INT(i) = self.take_token().0 {
-            Ok(Expression::Integer(*i))
-        } else {
-            Err(Error::ParseExprErr {
-                expected: "integer".to_string(),
-                got: self.take_token().0.clone(),
-            })
+    fn parse_number(&mut self) -> error::Result<Expression> {
+        let (expr, move_num) = match self.take_token().0 {
+            Token::IMEGINARY(i) => (Expression::Complex { re: 0, im: *i }, false),
+            Token::INT(n) => {
+                if let Token::IMEGINARY(i) = self.take_token().2 {
+                    if self.take_token().1 == &Token::PLUS {
+                        (Expression::Complex { re: *n, im: *i }, true)
+                    } else if self.take_token().1 == &Token::MINUS {
+                        (Expression::Complex { re: *n, im: -*i }, true)
+                    } else {
+                        (Expression::Integer(*n), false)
+                    }
+                } else {
+                    (Expression::Integer(*n), false)
+                }
+            }
+            _ => {
+                return Err(Error::ParseExprErr {
+                    expected: "number".to_string(),
+                    got: self.take_token().0.clone(),
+                })
+            }
+        };
+
+        if move_num {
+            self.next_token();
+            self.next_token();
         }
+        Ok(expr)
     }
 
     fn parse_boolean(&mut self) -> error::Result<Expression> {
@@ -396,6 +422,21 @@ mod test {
     );
 
     test_parser!(
+        parse_complex => r#" 5j;
+        1 + 12j;
+        532 - 221j;"#;
+        Statement::ExpressionStmt {
+            expression: Expression::Complex { re: 0, im: 5 },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Complex { re: 1, im: 12 },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Complex { re: 532, im: -221 },
+        }
+    );
+
+    test_parser!(
         parse_prefix => r#"!5;
             -15;"#;
         Statement::ExpressionStmt {
@@ -481,6 +522,7 @@ mod test {
 
     test_parser!(
         parse_complex_infix => r#"3 - - 2;
+        2 + 3j + 5 - 4j;
         3 + 4 * - 5 == 3 * 1 + -4 / 5;"#;
         Statement::ExpressionStmt {
             expression: Expression::Infix {
@@ -491,6 +533,19 @@ mod test {
                     right: Box::new(Expression::Integer(2)),
                 }),
             },
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Complex {
+                    re: 2,
+                    im: 3,
+                }),
+                operator: Token::PLUS,
+                right: Box::new(Expression::Complex {
+                    re: 5,
+                    im: -4,
+                }),
+            }
         },
         Statement::ExpressionStmt {
             expression: Expression::Infix {

@@ -1,11 +1,26 @@
+use crate::parser::ast::BlockStmt;
 use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Object {
-    Integer { value: i64 },
-    Boolean { value: bool },
-    ReturnValue { value: Box<Object> },
+    Integer {
+        value: i64,
+    },
+    Complex {
+        re: i64,
+        im: i64,
+    },
+    Boolean {
+        value: bool,
+    },
+    ReturnValue {
+        value: Box<Object>,
+    },
+    Function {
+        parameters: Vec<String>,
+        body: BlockStmt,
+    },
     DeclareVariable, // This special object makes not to print the value of expression
     Null,
 }
@@ -14,8 +29,10 @@ impl Object {
     pub fn obj_type(&self) -> String {
         match self {
             Object::Integer { .. } => "INTEGER".to_string(),
+            Object::Complex { .. } => "COMPLEX".to_string(),
             Object::Boolean { .. } => "BOOLEAN".to_string(),
             Object::ReturnValue { .. } => "RETURN".to_string(),
+            Object::Function { .. } => "FUNCTION".to_string(),
             Object::Null => "NULL".to_string(),
             Object::DeclareVariable => "DECLARE".to_string(),
         }
@@ -24,14 +41,24 @@ impl Object {
     pub fn is_same_type(left: &Object, right: &Object) -> bool {
         left.obj_type() == right.obj_type()
     }
+
+    pub fn to_complex(&self) -> Option<Self> {
+        match self {
+            Object::Complex { re, im } => Some(Object::Complex { re: *re, im: *im }),
+            Object::Integer { value } => Some(Object::Complex { re: *value, im: 0 }),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Object::Integer { value } => write!(f, "{}", value),
+            Object::Complex { re, im } => write!(f, "({0} + {1}j)", re, im),
             Object::Boolean { value } => write!(f, "{}", value),
             Object::ReturnValue { value } => write!(f, "{}", *value),
+            Object::Function { .. } => write!(f, ""),
             Object::Null => write!(f, "()"),
             // If variables are declared, its variable should not displayed.
             // So I set this with unreachable.
@@ -40,7 +67,7 @@ impl fmt::Display for Object {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Environment {
     pub store: HashMap<String, Object>,
 }

@@ -32,6 +32,7 @@ pub fn eval(node: Statement, env: &mut Environment) -> error::Result<Object> {
         }),
         Statement::ExpressionStmt { expression } => match expression {
             Expression::Integer(value) => Ok(Object::Integer { value }),
+            Expression::Complex { re, im } => Ok(Object::Complex { re, im }),
             Expression::Ident(value) => eval_identifier(value, env),
             Expression::Boolean(value) => {
                 if value {
@@ -88,11 +89,11 @@ fn eval_prefix_expr(operator: Token, right: Object) -> error::Result<Object> {
 }
 
 fn eval_infix_expr(operator: Token, left: Object, right: Object) -> error::Result<Object> {
-    match (&left, &right) {
-        (&Object::Integer { value: left }, &Object::Integer { value: right }) => {
-            eval_integer_infix_expr(operator, left, right)
-        }
-        _ if Object::is_same_type(&left, &right) => match operator {
+    // Check whether left and right are number types
+    if left.to_complex().is_some() && right.to_complex().is_some() {
+        eval_num_infix_expr(operator, left, right)
+    } else if Object::is_same_type(&left, &right) {
+        match operator {
             Token::EQ => {
                 if left == right {
                     Ok(TRUE)
@@ -112,12 +113,13 @@ fn eval_infix_expr(operator: Token, left: Object, right: Object) -> error::Resul
                 operator,
                 right,
             }),
-        },
-        _ => Err(Error::EvalTypeMismatch {
+        }
+    } else {
+        Err(Error::EvalTypeMismatch {
             left,
             operator,
             right,
-        }),
+        })
     }
 }
 
@@ -146,13 +148,76 @@ fn eval_bang_operator_expr(right: Object) -> error::Result<Object> {
 }
 
 fn eval_minus_operator_expr(right: Object) -> error::Result<Object> {
-    if let Object::Integer { value } = right {
-        Ok(Object::Integer { value: -value })
-    } else {
-        Err(Error::EvalUnknownPrefix {
+    match right {
+        Object::Integer { value } => Ok(Object::Integer { value: -value }),
+        Object::Complex { re: 0, im } => Ok(Object::Complex { re: 0, im: -im }),
+        Object::Complex { re, im } => Ok(Object::Complex { re: -re, im }),
+        _ => Err(Error::EvalUnknownPrefix {
             operator: Token::MINUS,
             right,
-        })
+        }),
+    }
+}
+
+fn eval_num_infix_expr(operator: Token, lf: Object, rt: Object) -> error::Result<Object> {
+    use crate::object::Object::Complex;
+    // This function called only when both option are some.
+    // So unwraping these does not cause panic.
+    match (lf.to_complex().unwrap(), rt.to_complex().unwrap()) {
+        (Complex { re: lf, im: 0 }, Complex { re: rt, im: 0 }) => {
+            eval_integer_infix_expr(operator, lf, rt)
+        }
+        (
+            Complex {
+                re: lf_re,
+                im: lf_im,
+            },
+            Complex {
+                re: rt_re,
+                im: rt_im,
+            },
+        ) => eval_complex_infix_expr(operator, lf_re, lf_im, rt_re, rt_im),
+        _ => Ok(NULL),
+    }
+}
+fn eval_complex_infix_expr(
+    operator: Token,
+    lf_re: i64,
+    lf_im: i64,
+    rt_re: i64,
+    rt_im: i64,
+) -> error::Result<Object> {
+    match operator {
+        Token::PLUS => Ok(Object::Complex {
+            re: lf_re + rt_re,
+            im: lf_im + rt_im,
+        }),
+        Token::MINUS => Ok(Object::Complex {
+            re: lf_re - rt_re,
+            im: lf_im - rt_im,
+        }),
+        Token::ASTERISK => Ok(Object::Complex {
+            re: lf_re * rt_re - lf_im * rt_im,
+            im: lf_re * rt_im + lf_im * rt_re,
+        }),
+        Token::EQ => Ok(Object::Boolean {
+            value: lf_re == rt_re && lf_im == rt_im,
+        }),
+        Token::NOTEQ => Ok(Object::Boolean {
+            value: lf_re != rt_re || lf_im != rt_im,
+        }),
+        // Division, power operation and ordering are not implemented.
+        _ => Err(Error::EvalUnknownInfix {
+            left: Object::Complex {
+                re: lf_re,
+                im: lf_im,
+            },
+            operator,
+            right: Object::Complex {
+                re: rt_re,
+                im: rt_im,
+            },
+        }),
     }
 }
 
@@ -243,6 +308,46 @@ mod test {
         );
         Ok(())
     }
+
+    #[test]
+    fn eval_complex() -> error::Result<()> {
+        let mut env = Environment::new();
+        let input: Vec<_> = Parser::new(Lexer::new(
+            r#"
+            5j; 10j;
+            -5j; -10j;
+            1 + 4j; 1 - 4j;
+            -1 + 4j; -1 - 4j;
+            -1 + 4j + -1 - 4j;
+            -1 + 4j - -1 - 4j;
+            -1 + 4j * -1 - 4j;
+            (-1 + 4j) * (-1 - 4j);
+            "#,
+        ))
+        .parse_program()?
+        .into_iter()
+        .map(|x| eval(x, &mut env).unwrap())
+        .collect();
+        assert_eq!(
+            input,
+            vec![
+                Object::Complex { re: 0, im: 5 },
+                Object::Complex { re: 0, im: 10 },
+                Object::Complex { re: 0, im: -5 },
+                Object::Complex { re: 0, im: -10 },
+                Object::Complex { re: 1, im: 4 },
+                Object::Complex { re: 1, im: -4 },
+                Object::Complex { re: -1, im: 4 },
+                Object::Complex { re: -1, im: -4 },
+                Object::Complex { re: -2, im: 0 },
+                Object::Complex { re: 0, im: 8 },
+                Object::Complex { re: 17, im: 0 },
+                Object::Complex { re: 17, im: 0 },
+            ]
+        );
+        Ok(())
+    }
+
     #[test]
     fn eval_boolean() -> error::Result<()> {
         let mut env = Environment::new();

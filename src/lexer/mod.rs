@@ -89,7 +89,7 @@ impl<'a> Lexer<'a> {
                     Token::IDENT(read_str.to_string())
                 }
             }
-            _ if self.ch.is_ascii_digit() => Token::INT(self.read_number()),
+            _ if self.ch.is_ascii_digit() => self.read_number(),
             _ => Token::ILLIGAL,
         };
         self.read_char();
@@ -106,14 +106,21 @@ impl<'a> Lexer<'a> {
         &self.input[position..=self.position]
     }
 
-    fn read_number(&mut self) -> i64 {
+    // Add lexing a imeginary part of complex number
+    fn read_number(&mut self) -> Token {
         let position = self.position;
         while self.ch.is_ascii_digit() {
             self.read_char();
         }
         self.position -= 1;
         self.read_position -= 1;
-        self.input[position..=self.position].parse().unwrap()
+        let num = self.input[position..=self.position].parse().unwrap();
+        if self.peek_char() == 'j' {
+            self.read_char();
+            Token::IMEGINARY(num)
+        } else {
+            Token::INT(num)
+        }
     }
 }
 
@@ -165,7 +172,9 @@ fn more_complex_lex() {
     }
     
     10 == 10;
-    10 != 9;"#;
+    10 != 9;
+    1 + 2j;
+    "#;
     let lex = Lexer::new(&input).collect::<Vec<Token>>();
     let expected = vec![
         Token::LET,
@@ -244,6 +253,10 @@ fn more_complex_lex() {
         Token::INT(10),
         Token::NOTEQ,
         Token::INT(9),
+        Token::SEMICOLON,
+        Token::INT(1),
+        Token::PLUS,
+        Token::IMEGINARY(2),
         Token::SEMICOLON,
         Token::EOF,
     ];

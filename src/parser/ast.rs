@@ -3,18 +3,23 @@ use crate::lexer::token::Token;
 pub type Program = Vec<Statement>;
 pub type BlockStmt = Vec<Statement>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub enum Statement {
     LetStmt { name: String, value: Expression },
     ReturnStmt { value: Expression },
     ExpressionStmt { expression: Expression },
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub enum Expression {
     Ident(String),
-    Integer(i64),
     Boolean(bool),
+    Integer(i64),
+    // Yet complex number is just implemented with integer values
+    Complex {
+        re: i64,
+        im: i64,
+    },
     Prefix {
         operator: Token,
         right: Box<Expression>,

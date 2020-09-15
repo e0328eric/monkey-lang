@@ -150,8 +150,7 @@ fn eval_bang_operator_expr(right: Object) -> error::Result<Object> {
 fn eval_minus_operator_expr(right: Object) -> error::Result<Object> {
     match right {
         Object::Integer { value } => Ok(Object::Integer { value: -value }),
-        Object::Complex { re: 0, im } => Ok(Object::Complex { re: 0, im: -im }),
-        Object::Complex { re, im } => Ok(Object::Complex { re: -re, im }),
+        Object::Complex { re, im } => Ok(Object::Complex { re: -re, im: -im }),
         _ => Err(Error::EvalUnknownPrefix {
             operator: Token::MINUS,
             right,
@@ -314,14 +313,16 @@ mod test {
         let mut env = Environment::new();
         let input: Vec<_> = Parser::new(Lexer::new(
             r#"
-            5j; 10j;
-            -5j; -10j;
-            1 + 4j; 1 - 4j;
-            -1 + 4j; -1 - 4j;
-            -1 + 4j + -1 - 4j;
-            -1 + 4j - -1 - 4j;
-            -1 + 4j * -1 - 4j;
-            (-1 + 4j) * (-1 - 4j);
+            5J; 10J;
+            -5J; -10J;
+            1 + 4J; 1 - 4J;
+            - 1 + 4J; - 1 - 4J;
+            (-1) + 4J; (-1) - 4J;
+            (-1) + 4J + (-1) - 4J;
+            (-1) + 4J - (-1) - 4J;
+            ((-1) + 4J) - ((-1) - 4J);
+            (-1) + 4J * (-1) - 4J;
+            ((-1) + 4J) * ((-1) - 4J);
             "#,
         ))
         .parse_program()?
@@ -337,11 +338,14 @@ mod test {
                 Object::Complex { re: 0, im: -10 },
                 Object::Complex { re: 1, im: 4 },
                 Object::Complex { re: 1, im: -4 },
+                Object::Complex { re: -1, im: -4 },
+                Object::Complex { re: -1, im: 4 },
                 Object::Complex { re: -1, im: 4 },
                 Object::Complex { re: -1, im: -4 },
                 Object::Complex { re: -2, im: 0 },
+                Object::Complex { re: 0, im: 0 },
                 Object::Complex { re: 0, im: 8 },
-                Object::Complex { re: 17, im: 0 },
+                Object::Complex { re: -1, im: -8 },
                 Object::Complex { re: 17, im: 0 },
             ]
         );

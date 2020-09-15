@@ -422,9 +422,9 @@ mod test {
     );
 
     test_parser!(
-        parse_complex => r#" 5j;
-        1 + 12j;
-        532 - 221j;"#;
+        parse_complex => r#"5J;
+        1 + 12J;
+        532 - 221J;"#;
         Statement::ExpressionStmt {
             expression: Expression::Complex { re: 0, im: 5 },
         },
@@ -522,7 +522,7 @@ mod test {
 
     test_parser!(
         parse_complex_infix => r#"3 - - 2;
-        2 + 3j + 5 - 4j;
+        2 + 3J + 5 - 4J;
         3 + 4 * - 5 == 3 * 1 + -4 / 5;"#;
         Statement::ExpressionStmt {
             expression: Expression::Infix {

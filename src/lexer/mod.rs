@@ -115,7 +115,7 @@ impl<'a> Lexer<'a> {
         self.position -= 1;
         self.read_position -= 1;
         let num = self.input[position..=self.position].parse().unwrap();
-        if self.peek_char() == 'j' {
+        if self.peek_char() == 'J' {
             self.read_char();
             Token::IMEGINARY(num)
         } else {
@@ -173,7 +173,7 @@ fn more_complex_lex() {
     
     10 == 10;
     10 != 9;
-    1 + 2j;
+    1 + 2J;
     "#;
     let lex = Lexer::new(&input).collect::<Vec<Token>>();
     let expected = vec![

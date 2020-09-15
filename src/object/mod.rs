@@ -55,7 +55,7 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Object::Integer { value } => write!(f, "{}", value),
-            Object::Complex { re, im } => write!(f, "({0} + {1}j)", re, im),
+            Object::Complex { re, im } => write!(f, "({0}+{1}J)", re, im),
             Object::Boolean { value } => write!(f, "{}", value),
             Object::ReturnValue { value } => write!(f, "{}", *value),
             Object::Function { .. } => write!(f, ""),

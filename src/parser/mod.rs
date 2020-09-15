@@ -85,6 +85,7 @@ impl Parser {
             Token::NOTEQ => Some(Parser::parse_infix_expr),
             Token::LT => Some(Parser::parse_infix_expr),
             Token::GT => Some(Parser::parse_infix_expr),
+            Token::POWER => Some(Parser::parse_infix_expr),
             Token::LPAREN => Some(Parser::parse_call_expr),
             _ => None,
         }
@@ -289,7 +290,7 @@ impl Parser {
         let mut left_exp = if let Some(prefix) = self.prefix_fn() {
             prefix(self)?
         } else {
-            return Err(Error::PrefixNoneErr {
+            return Err(Error::PrefixParseNoneErr {
                 got: self.take_token().0.clone(),
             });
         };
@@ -301,7 +302,7 @@ impl Parser {
                 self.next_token();
                 infix(self, &left_exp)?
             } else {
-                return Err(Error::InfixNoneErr {
+                return Err(Error::InfixParseNoneErr {
                     got: self.take_token().1.clone(),
                 });
             };

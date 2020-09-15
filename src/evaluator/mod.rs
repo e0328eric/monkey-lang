@@ -1,19 +1,19 @@
-mod evalerror;
-
-use crate::evaluator::evalerror::EvalError;
+use crate::error;
 use crate::lexer::token::Token;
-use crate::object::Object;
+use crate::object::{Environment, Object};
 use crate::parser::ast::*;
+
+type Error = crate::error::MonkeyErr;
 
 // To make unique objects
 const TRUE: Object = Object::Boolean { value: true };
 const FALSE: Object = Object::Boolean { value: false };
 const NULL: Object = Object::Null;
 
-pub fn eval_program(stmts: Vec<Statement>) -> evalerror::Result<Object> {
+pub fn eval_program(stmts: Vec<Statement>, env: &mut Environment) -> error::Result<Object> {
     let mut result: Object = NULL;
     for statement in stmts {
-        result = eval(statement)?;
+        result = eval(statement, env)?;
         if let Object::ReturnValue { value } = result {
             return Ok(*value);
         }
@@ -21,10 +21,18 @@ pub fn eval_program(stmts: Vec<Statement>) -> evalerror::Result<Object> {
     Ok(result)
 }
 
-pub fn eval(node: Statement) -> evalerror::Result<Object> {
+pub fn eval(node: Statement, env: &mut Environment) -> error::Result<Object> {
     match node {
+        Statement::LetStmt { name, value } => {
+            let val = eval(value.into(), env)?;
+            Ok(env.set(name, val))
+        }
+        Statement::ReturnStmt { value } => Ok(Object::ReturnValue {
+            value: Box::new(eval(value.into(), env)?),
+        }),
         Statement::ExpressionStmt { expression } => match expression {
             Expression::Integer(value) => Ok(Object::Integer { value }),
+            Expression::Ident(value) => eval_identifier(value, env),
             Expression::Boolean(value) => {
                 if value {
                     Ok(TRUE)
@@ -33,32 +41,37 @@ pub fn eval(node: Statement) -> evalerror::Result<Object> {
                 }
             }
             Expression::Prefix { operator, right } => {
-                eval_prefix_expr(operator, eval(right.into())?)
+                eval_prefix_expr(operator, eval(right.into(), env)?)
             }
 
             Expression::Infix {
                 left,
                 operator,
                 right,
-            } => eval_infix_expr(operator, eval(left.into())?, eval(right.into())?),
+            } => eval_infix_expr(operator, eval(left.into(), env)?, eval(right.into(), env)?),
             Expression::IfExpr {
                 condition,
                 consequence,
                 alternative,
-            } => eval_if_expr(eval(condition.into())?, consequence, alternative),
+            } => eval_if_expr(eval(condition.into(), env)?, consequence, alternative, env),
             _ => Ok(NULL),
         },
-        Statement::ReturnStmt { value } => Ok(Object::ReturnValue {
-            value: Box::new(eval(value.into())?),
-        }),
-        _ => Ok(NULL),
     }
 }
 
-fn eval_stmts(block: BlockStmt) -> evalerror::Result<Object> {
+fn eval_identifier(ident: String, env: &mut Environment) -> error::Result<Object> {
+    let value = env.get(&ident);
+    if let Some(val) = value {
+        Ok(val.clone())
+    } else {
+        Err(Error::EvalIdentNotFound { name_got: ident })
+    }
+}
+
+fn eval_stmts(block: BlockStmt, env: &mut Environment) -> error::Result<Object> {
     let mut result: Object = NULL;
     for statement in block {
-        result = eval(statement)?;
+        result = eval(statement, env)?;
         if let Object::ReturnValue { .. } = result {
             return Ok(result);
         }
@@ -66,15 +79,15 @@ fn eval_stmts(block: BlockStmt) -> evalerror::Result<Object> {
     Ok(result)
 }
 
-fn eval_prefix_expr(operator: Token, right: Object) -> evalerror::Result<Object> {
+fn eval_prefix_expr(operator: Token, right: Object) -> error::Result<Object> {
     match operator {
         Token::BANG => eval_bang_operator_expr(right),
         Token::MINUS => eval_minus_operator_expr(right),
-        _ => Err(EvalError::UnknownPrefix { operator, right }),
+        _ => Err(Error::EvalUnknownPrefix { operator, right }),
     }
 }
 
-fn eval_infix_expr(operator: Token, left: Object, right: Object) -> evalerror::Result<Object> {
+fn eval_infix_expr(operator: Token, left: Object, right: Object) -> error::Result<Object> {
     match (&left, &right) {
         (&Object::Integer { value: left }, &Object::Integer { value: right }) => {
             eval_integer_infix_expr(operator, left, right)
@@ -94,13 +107,13 @@ fn eval_infix_expr(operator: Token, left: Object, right: Object) -> evalerror::R
                     Ok(FALSE)
                 }
             }
-            _ => Err(EvalError::UnknownInfix {
+            _ => Err(Error::EvalUnknownInfix {
                 left,
                 operator,
                 right,
             }),
         },
-        _ => Err(EvalError::TypeMismatch {
+        _ => Err(Error::EvalTypeMismatch {
             left,
             operator,
             right,
@@ -108,17 +121,22 @@ fn eval_infix_expr(operator: Token, left: Object, right: Object) -> evalerror::R
     }
 }
 
-fn eval_if_expr(cond: Object, consq: BlockStmt, alter: BlockStmt) -> evalerror::Result<Object> {
+fn eval_if_expr(
+    cond: Object,
+    consq: BlockStmt,
+    alter: BlockStmt,
+    env: &mut Environment,
+) -> error::Result<Object> {
     if is_truthy(&cond) {
-        eval_stmts(consq)
+        eval_stmts(consq, env)
     } else if !alter.is_empty() {
-        eval_stmts(alter)
+        eval_stmts(alter, env)
     } else {
         Ok(NULL)
     }
 }
 
-fn eval_bang_operator_expr(right: Object) -> evalerror::Result<Object> {
+fn eval_bang_operator_expr(right: Object) -> error::Result<Object> {
     match right {
         TRUE => Ok(FALSE),
         FALSE => Ok(TRUE),
@@ -127,28 +145,37 @@ fn eval_bang_operator_expr(right: Object) -> evalerror::Result<Object> {
     }
 }
 
-fn eval_minus_operator_expr(right: Object) -> evalerror::Result<Object> {
+fn eval_minus_operator_expr(right: Object) -> error::Result<Object> {
     if let Object::Integer { value } = right {
         Ok(Object::Integer { value: -value })
     } else {
-        Err(EvalError::UnknownPrefix {
+        Err(Error::EvalUnknownPrefix {
             operator: Token::MINUS,
             right,
         })
     }
 }
 
-fn eval_integer_infix_expr(operator: Token, lf: i64, rt: i64) -> evalerror::Result<Object> {
+fn eval_integer_infix_expr(operator: Token, lf: i64, rt: i64) -> error::Result<Object> {
     match operator {
         Token::PLUS => Ok(Object::Integer { value: lf + rt }),
         Token::MINUS => Ok(Object::Integer { value: lf - rt }),
         Token::ASTERISK => Ok(Object::Integer { value: lf * rt }),
         Token::SLASH => Ok(Object::Integer { value: lf / rt }),
+        Token::POWER => {
+            if rt >= 0 {
+                Ok(Object::Integer {
+                    value: lf.pow(rt as u32),
+                })
+            } else {
+                Err(Error::EvalPowErr)
+            }
+        }
         Token::LT => Ok(Object::Boolean { value: lf < rt }),
         Token::GT => Ok(Object::Boolean { value: lf > rt }),
         Token::EQ => Ok(Object::Boolean { value: lf == rt }),
         Token::NOTEQ => Ok(Object::Boolean { value: lf != rt }),
-        _ => Err(EvalError::UnknownInfix {
+        _ => Err(Error::EvalUnknownInfix {
             left: Object::Integer { value: lf },
             operator,
             right: Object::Integer { value: rt },
@@ -172,6 +199,7 @@ mod test {
 
     #[test]
     fn eval_integers() -> error::Result<()> {
+        let mut env = Environment::new();
         let input: Vec<_> = Parser::new(Lexer::new(
             r#"
             5; 10;
@@ -191,7 +219,7 @@ mod test {
         ))
         .parse_program()?
         .into_iter()
-        .map(|x| eval(x).unwrap())
+        .map(|x| eval(x, &mut env).unwrap())
         .collect();
         assert_eq!(
             input,
@@ -217,6 +245,7 @@ mod test {
     }
     #[test]
     fn eval_boolean() -> error::Result<()> {
+        let mut env = Environment::new();
         let input: Vec<_> = Parser::new(Lexer::new(
             r#"
             false;
@@ -239,7 +268,7 @@ mod test {
         ))
         .parse_program()?
         .into_iter()
-        .map(|x| eval(x).unwrap())
+        .map(|x| eval(x, &mut env).unwrap())
         .collect();
         assert_eq!(
             input,
@@ -267,10 +296,11 @@ mod test {
 
     #[test]
     fn eval_mixed() -> error::Result<()> {
+        let mut env = Environment::new();
         let input: Vec<_> = Parser::new(Lexer::new("7; true; 15; false; false; 324;"))
             .parse_program()?
             .into_iter()
-            .map(|x| eval(x).unwrap())
+            .map(|x| eval(x, &mut env).unwrap())
             .collect();
         assert_eq!(
             input,
@@ -288,10 +318,11 @@ mod test {
 
     #[test]
     fn eval_bang_operator() -> error::Result<()> {
+        let mut env = Environment::new();
         let input: Vec<_> = Parser::new(Lexer::new("!true; !false !5; !!true; !!false; !!5;"))
             .parse_program()?
             .into_iter()
-            .map(|x| eval(x).unwrap())
+            .map(|x| eval(x, &mut env).unwrap())
             .collect();
         assert_eq!(
             input,
@@ -309,6 +340,7 @@ mod test {
 
     #[test]
     fn eval_if_else_expr() -> error::Result<()> {
+        let mut env = Environment::new();
         let input: Vec<_> = Parser::new(Lexer::new(
             r#"
             if (true) { 10 };
@@ -322,7 +354,7 @@ mod test {
         ))
         .parse_program()?
         .into_iter()
-        .map(|x| eval(x).unwrap())
+        .map(|x| eval(x, &mut env).unwrap())
         .collect();
         assert_eq!(
             input,
@@ -341,6 +373,7 @@ mod test {
 
     #[test]
     fn eval_return_expr() -> error::Result<()> {
+        let mut env = Environment::new();
         let input = eval_program(
             Parser::new(Lexer::new(
                 r#"
@@ -348,6 +381,7 @@ mod test {
             "#,
             ))
             .parse_program()?,
+            &mut env,
         )
         .unwrap();
         assert_eq!(input, Object::Integer { value: 10 });
@@ -356,6 +390,7 @@ mod test {
 
     #[test]
     fn eval_nested_block_expr() -> error::Result<()> {
+        let mut env = Environment::new();
         let input = eval_program(
             Parser::new(Lexer::new(
                 r#"
@@ -369,9 +404,44 @@ mod test {
             "#,
             ))
             .parse_program()?,
+            &mut env,
         )
         .unwrap();
         assert_eq!(input, Object::Integer { value: 10 });
+        Ok(())
+    }
+
+    #[test]
+    fn eval_let_expr() -> error::Result<()> {
+        let mut env = Environment::new();
+        let input: Vec<_> = Parser::new(Lexer::new(
+            r#"
+            let a = 5; a;
+            let a = 5 * 5; a;
+            let a = 5; let b = a; b;
+            let a = 5; let b = a; let c = a + b + 5; c;
+            "#,
+        ))
+        .parse_program()?
+        .into_iter()
+        .map(|x| eval(x, &mut env).unwrap())
+        .collect();
+        assert_eq!(
+            input,
+            vec![
+                Object::DeclareVariable,
+                Object::Integer { value: 5 },
+                Object::DeclareVariable,
+                Object::Integer { value: 25 },
+                Object::DeclareVariable,
+                Object::DeclareVariable,
+                Object::Integer { value: 5 },
+                Object::DeclareVariable,
+                Object::DeclareVariable,
+                Object::DeclareVariable,
+                Object::Integer { value: 15 },
+            ]
+        );
         Ok(())
     }
 }

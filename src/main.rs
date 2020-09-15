@@ -7,27 +7,23 @@ mod object;
 mod parser;
 
 use crate::lexer::Lexer;
+use crate::object::Object;
 use crate::parser::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-fn main() -> error::Result<()> {
+fn main() {
+    let mut env = object::Environment::new();
     let mut rl = Editor::<()>::new();
     loop {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
                 let parsed = Parser::new(Lexer::new(&line)).parse_program();
-                if let Err(error) = parsed {
-                    eprintln!("{}", error);
-                } else {
-                    let objects = evaluator::eval_program(parsed.unwrap());
-                    if let Err(error) = objects {
-                        eprintln!("{}", error);
-                    } else {
-                        println!("{}", objects.unwrap());
-                    }
-                }
+                handle_error!(parsed => {
+                    let object = evaluator::eval_program(parsed.unwrap(), &mut env);
+                    handle_error!(object => print_object(object.unwrap()));
+                });
             }
             Err(ReadlineError::Interrupted) => break,
             Err(ReadlineError::Eof) => break,
@@ -37,5 +33,12 @@ fn main() -> error::Result<()> {
             }
         }
     }
-    Ok(())
+}
+
+fn print_object(obj: Object) {
+    if let Object::DeclareVariable = obj {
+        print!("");
+    } else {
+        println!("{}", obj);
+    }
 }

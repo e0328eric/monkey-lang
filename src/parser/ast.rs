@@ -58,6 +58,7 @@ pub enum Precedence {
     LESSGREATER,
     SUM,
     PRODUCT,
+    POWER,
     PREFIX,
     CALL,
 }
@@ -73,6 +74,7 @@ impl Precedence {
             Token::MINUS => Precedence::SUM,
             Token::ASTERISK => Precedence::PRODUCT,
             Token::SLASH => Precedence::PRODUCT,
+            Token::POWER => Precedence::POWER,
             Token::LPAREN => Precedence::CALL,
             _ => Precedence::LOWEST,
         }

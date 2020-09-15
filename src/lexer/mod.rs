@@ -54,7 +54,14 @@ impl<'a> Lexer<'a> {
             }
             '+' => Token::PLUS,
             '-' => Token::MINUS,
-            '*' => Token::ASTERISK,
+            '*' => {
+                if self.peek_char() == '*' {
+                    self.read_char();
+                    Token::POWER
+                } else {
+                    Token::ASTERISK
+                }
+            }
             '/' => Token::SLASH,
             '!' => {
                 if self.peek_char() == '=' {
@@ -149,6 +156,7 @@ fn more_complex_lex() {
     let result = add(five, ten);
     !-/*5;
     5 < 10 > 5;
+    10 ** 10;
     
     if (5 < 10) {
         return true;
@@ -207,6 +215,10 @@ fn more_complex_lex() {
         Token::INT(10),
         Token::GT,
         Token::INT(5),
+        Token::SEMICOLON,
+        Token::INT(10),
+        Token::POWER,
+        Token::INT(10),
         Token::SEMICOLON,
         Token::IF,
         Token::LPAREN,

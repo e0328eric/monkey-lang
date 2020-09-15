@@ -17,6 +17,7 @@ pub enum Token {
     BANG,
     ASTERISK,
     SLASH,
+    POWER,
     LT,
     GT,
     EQ,
@@ -81,6 +82,7 @@ impl Token {
             Token::GT => Ok(">".to_string()),
             Token::EQ => Ok("==".to_string()),
             Token::NOTEQ => Ok("!=".to_string()),
+            Token::POWER => Ok("**".to_string()),
             Token::BANG => Ok("!".to_string()),
             _ => Err(Error::CannotConvertSymbolErr { got: self.clone() }),
         }

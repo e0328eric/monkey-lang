@@ -1,10 +1,12 @@
+use std::collections::HashMap;
 use std::fmt;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Object {
     Integer { value: i64 },
     Boolean { value: bool },
     ReturnValue { value: Box<Object> },
+    DeclareVariable, // This special object makes not to print the value of expression
     Null,
 }
 
@@ -15,6 +17,7 @@ impl Object {
             Object::Boolean { .. } => "BOOLEAN".to_string(),
             Object::ReturnValue { .. } => "RETURN".to_string(),
             Object::Null => "NULL".to_string(),
+            Object::DeclareVariable => "DECLARE".to_string(),
         }
     }
 
@@ -30,6 +33,31 @@ impl fmt::Display for Object {
             Object::Boolean { value } => write!(f, "{}", value),
             Object::ReturnValue { value } => write!(f, "{}", *value),
             Object::Null => write!(f, "()"),
+            // If variables are declared, its variable should not displayed.
+            // So I set this with unreachable.
+            Object::DeclareVariable => unreachable!(),
         }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Environment {
+    pub store: HashMap<String, Object>,
+}
+
+impl Environment {
+    pub fn new() -> Self {
+        Self {
+            store: HashMap::new(),
+        }
+    }
+
+    pub fn get(&mut self, name: &str) -> Option<&Object> {
+        self.store.get(name)
+    }
+
+    pub fn set(&mut self, name: String, val: Object) -> Object {
+        self.store.insert(name, val);
+        Object::DeclareVariable
     }
 }

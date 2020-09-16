@@ -46,6 +46,9 @@ pub enum MonkeyErr {
     EvalIdentNotFound {
         name_got: String,
     },
+    EvalNotFunction {
+        got: Object,
+    },
 }
 
 impl MonkeyErr {
@@ -122,6 +125,7 @@ impl Display for MonkeyErr {
             MonkeyErr::EvalIdentNotFound { name_got } => {
                 write!(f, "Identifier not found: {}", name_got)
             }
+            MonkeyErr::EvalNotFunction { got } => write!(f, "Not a function: {}", got.obj_type()),
         }
     }
 }

@@ -55,9 +55,66 @@ pub fn eval(node: Statement, env: &mut Environment) -> error::Result<Object> {
                 consequence,
                 alternative,
             } => eval_if_expr(eval(condition.into(), env)?, consequence, alternative, env),
-            _ => Ok(NULL),
+            Expression::Function { parameter, body } => Ok(Object::Function {
+                parameter,
+                body,
+                env: Box::new(env.clone()),
+            }),
+            Expression::Call {
+                function,
+                arguments,
+            } => {
+                let function = eval(function.into(), env)?;
+                let args = eval_expressions(arguments, env)?;
+                apply_function(function, args)
+            }
         },
     }
+}
+
+fn eval_expressions(exps: Vec<Expression>, env: &mut Environment) -> error::Result<Vec<Object>> {
+    let mut result: Vec<Object> = Vec::new();
+
+    for e in exps {
+        let evaluated = eval(e.into(), env)?;
+        result.push(evaluated);
+    }
+
+    Ok(result)
+}
+
+fn apply_function(function: Object, args: Vec<Object>) -> error::Result<Object> {
+    if let Object::Function {
+        parameter,
+        body,
+        env,
+    } = function
+    {
+        let mut extended_env = extended_function_env(parameter, args, &env);
+        let evaluated = eval_stmts(body, &mut extended_env)?;
+        if let Object::ReturnValue { value } = evaluated {
+            Ok(*value)
+        } else {
+            Ok(evaluated)
+        }
+    } else {
+        Err(Error::EvalNotFunction { got: function })
+    }
+}
+
+fn extended_function_env(
+    parameter: Vec<String>,
+    args: Vec<Object>,
+    env: &Environment,
+) -> Environment {
+    let mut env = Environment::new_enclosed(env);
+    for i in 0..parameter.len() {
+        env.set(
+            parameter.get(i).unwrap().to_owned(),
+            args.get(i).unwrap().to_owned(),
+        );
+    }
+    env
 }
 
 fn eval_identifier(ident: String, env: &mut Environment) -> error::Result<Object> {
@@ -176,7 +233,11 @@ fn eval_num_infix_expr(operator: Token, lf: Object, rt: Object) -> error::Result
                 im: rt_im,
             },
         ) => eval_complex_infix_expr(operator, lf_re, lf_im, rt_re, rt_im),
-        _ => Ok(NULL),
+        _ => Err(Error::EvalUnknownInfix {
+            left: lf,
+            operator,
+            right: rt,
+        }),
     }
 }
 fn eval_complex_infix_expr(
@@ -313,16 +374,16 @@ mod test {
         let mut env = Environment::new();
         let input: Vec<_> = Parser::new(Lexer::new(
             r#"
-            5J; 10J;
-            -5J; -10J;
-            1 + 4J; 1 - 4J;
-            - 1 + 4J; - 1 - 4J;
-            (-1) + 4J; (-1) - 4J;
-            (-1) + 4J + (-1) - 4J;
-            (-1) + 4J - (-1) - 4J;
-            ((-1) + 4J) - ((-1) - 4J);
-            (-1) + 4J * (-1) - 4J;
-            ((-1) + 4J) * ((-1) - 4J);
+            5i; 10i;
+            -5i; -10i;
+            1 + 4i; 1 - 4i;
+            - 1 + 4i; - 1 - 4i;
+            (-1) + 4i; (-1) - 4i;
+            (-1) + 4i + (-1) - 4i;
+            (-1) + 4i - (-1) - 4i;
+            ((-1) + 4i) - ((-1) - 4i);
+            (-1) + 4i * (-1) - 4i;
+            ((-1) + 4i) * ((-1) - 4i);
             "#,
         ))
         .parse_program()?
@@ -549,6 +610,71 @@ mod test {
                 Object::DeclareVariable,
                 Object::DeclareVariable,
                 Object::Integer { value: 15 },
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn eval_function_object() -> error::Result<()> {
+        let mut env = Environment::new();
+        let input: Vec<_> = Parser::new(Lexer::new(
+            r#"
+            fn(x) { x + 2; };
+            "#,
+        ))
+        .parse_program()?
+        .into_iter()
+        .map(|x| eval(x, &mut env).unwrap())
+        .collect();
+        assert_eq!(
+            input,
+            vec![Object::Function {
+                parameter: vec!["x".to_string()],
+                body: vec![Statement::ExpressionStmt {
+                    expression: Expression::Infix {
+                        left: Box::new(Expression::Ident("x".to_string())),
+                        operator: Token::PLUS,
+                        right: Box::new(Expression::Integer(2))
+                    }
+                }],
+                env: Box::new(env)
+            }]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn eval_function_application() -> error::Result<()> {
+        let mut env = Environment::new();
+        let input: Vec<_> = Parser::new(Lexer::new(
+            r#"
+            let identity = fn(x) { x; }; identity(5);
+            let identity = fn(x) { return x; }; identity(5);
+            let double = fn(x) { x * 2; }; double(6);
+            let add = fn(x, y) { x + y; }; add(6, 5);
+            let add = fn(x, y) { x + y; }; add(6 + 5, add(6, 5));
+            fn(x) { x; }(5);
+            "#,
+        ))
+        .parse_program()?
+        .into_iter()
+        .map(|x| eval(x, &mut env).unwrap())
+        .collect();
+        assert_eq!(
+            input,
+            vec![
+                Object::DeclareVariable,
+                Object::Integer { value: 5 },
+                Object::DeclareVariable,
+                Object::Integer { value: 5 },
+                Object::DeclareVariable,
+                Object::Integer { value: 12 },
+                Object::DeclareVariable,
+                Object::Integer { value: 11 },
+                Object::DeclareVariable,
+                Object::Integer { value: 22 },
+                Object::Integer { value: 5 },
             ]
         );
         Ok(())

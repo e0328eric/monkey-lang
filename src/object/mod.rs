@@ -22,7 +22,7 @@ pub enum Object {
         body: BlockStmt,
         env: Box<Environment>,
     },
-    DeclareVariable, // This special object makes not to print the value of expression
+    DeclareVariable, // This special object makes not to print the value of an expression
     Null,
 }
 
@@ -69,7 +69,7 @@ impl fmt::Display for Object {
             Object::ReturnValue { value } => write!(f, "{}", *value),
             Object::Function { .. } => write!(f, ""),
             Object::Null => write!(f, "()"),
-            // If variables are declared, its variable should not displayed.
+            // If variables are declared, its variable should not be displayed.
             // So I set this with unreachable.
             Object::DeclareVariable => unreachable!(),
         }

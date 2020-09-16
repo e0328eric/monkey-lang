@@ -4,7 +4,7 @@ use crate::lexer::token::Token;
 use crate::object::Object;
 
 pub enum MonkeyErr {
-    // These two errors are critical error so that the program panics
+    // These two errors are critical errors so that the program panics
     IOErr(std::io::Error),
     FmtErr(fmt::Error),
     // These errors are pure monkey lang errors

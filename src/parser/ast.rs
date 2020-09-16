@@ -15,7 +15,7 @@ pub enum Expression {
     Ident(String),
     Boolean(bool),
     Integer(i64),
-    // Yet complex number is just implemented with integer values
+    // Yet a complex number is just implemented with integer values
     Complex {
         re: i64,
         im: i64,

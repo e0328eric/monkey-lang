@@ -106,7 +106,7 @@ impl<'a> Lexer<'a> {
         &self.input[position..=self.position]
     }
 
-    // Add lexing a imeginary part of complex number
+    // Add lexing an imeginary part of complex number
     fn read_number(&mut self) -> Token {
         let position = self.position;
         while self.ch.is_ascii_digit() {

@@ -19,6 +19,7 @@ fn main() {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
+                rl.add_history_entry(&line);
                 let parsed = Parser::new(Lexer::new(&line)).parse_program();
                 handle_error!(parsed => {
                     let object = evaluator::eval_program(parsed.unwrap(), &mut env);

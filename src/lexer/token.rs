@@ -8,6 +8,7 @@ pub enum Token {
     EOF,
     // Identifiers + Literals
     IDENT(String),
+    STRING(String),
     INT(i64),
     IMEGINARY(i64),
 
@@ -68,7 +69,9 @@ impl Token {
     pub fn take_tok_name(&self) -> String {
         match self {
             Token::IDENT(_) => "IDENT".to_string(),
+            Token::STRING(_) => "STRING".to_string(),
             Token::INT(_) => "INT".to_string(),
+            Token::IMEGINARY(_) => "IMEGINARY".to_string(),
             _ => format!("{:?}", self),
         }
     }

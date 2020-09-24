@@ -13,6 +13,7 @@ pub enum Statement {
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub enum Expression {
     Ident(String),
+    String(String),
     Boolean(bool),
     Integer(i64),
     // Yet a complex number is just implemented with integer values
@@ -35,7 +36,7 @@ pub enum Expression {
         alternative: BlockStmt,
     },
     Function {
-        parameter: Vec<String>,
+        parameters: Vec<String>,
         body: BlockStmt,
     },
     Call {

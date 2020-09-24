@@ -68,6 +68,7 @@ impl Parser {
     fn prefix_fn(&mut self) -> Option<PrefixParseFn> {
         match self.take_token().0 {
             Token::IDENT(_) => Some(Parser::parse_identifier),
+            Token::STRING(_) => Some(Parser::parse_string),
             Token::INT(_) => Some(Parser::parse_number),
             Token::IMEGINARY(_) => Some(Parser::parse_number),
             Token::TRUE => Some(Parser::parse_boolean),
@@ -139,6 +140,17 @@ impl Parser {
         Ok(expr)
     }
 
+    fn parse_string(&mut self) -> error::Result<Expression> {
+        if let Token::STRING(s) = self.take_token().0 {
+            Ok(Expression::String(s.to_string()))
+        } else {
+            Err(Error::ParseExprErr {
+                expected: "string".to_string(),
+                got: self.take_token().0.clone(),
+            })
+        }
+    }
+
     fn parse_boolean(&mut self) -> error::Result<Expression> {
         Ok(Expression::Boolean(self.take_token().0 == &Token::TRUE))
     }
@@ -187,11 +199,11 @@ impl Parser {
 
     fn parse_function_literal(&mut self) -> error::Result<Expression> {
         expect_peek!(self => Token::LPAREN | Token::LPAREN);
-        let parameter = self.parse_function_parameters()?;
+        let parameters = self.parse_function_parameters()?;
         expect_peek!(self => Token::LBRACE | Token::LBRACE);
         let body = self.parse_block_statement()?;
 
-        Ok(Expression::Function { parameter, body })
+        Ok(Expression::Function { parameters, body })
     }
 
     fn parse_function_parameters(&mut self) -> error::Result<Vec<String>> {
@@ -690,7 +702,7 @@ mod test {
         "#;
         Statement::ExpressionStmt {
             expression: Expression::Function {
-                parameter: vec!["x".to_string(), "y".to_string()],
+                parameters: vec!["x".to_string(), "y".to_string()],
                 body: vec![
                     Statement::ExpressionStmt {
                     expression: Expression::Infix {
@@ -702,13 +714,13 @@ mod test {
         },
         Statement::ExpressionStmt {
             expression: Expression::Function {
-                parameter: vec![],
+                parameters: vec![],
                 body: vec![]
             }
         },
         Statement::ExpressionStmt {
             expression: Expression::Function {
-                parameter: vec!["x".to_string(), "y".to_string(), "z".to_string()],
+                parameters: vec!["x".to_string(), "y".to_string(), "z".to_string()],
                 body: vec![]
             }
         }

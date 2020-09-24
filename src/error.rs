@@ -4,6 +4,7 @@ use crate::lexer::token::Token;
 use crate::object::Object;
 
 pub enum MonkeyErr {
+    NoneErr, // This error is only for blank error
     // These two errors are critical errors so that the program panics
     IOErr(std::io::Error),
     FmtErr(fmt::Error),
@@ -46,8 +47,14 @@ pub enum MonkeyErr {
     EvalIdentNotFound {
         name_got: String,
     },
-    EvalNotFunction {
+    EvalNotFunction,
+    EvalArgErr {
+        fnt_name: String,
         got: Object,
+    },
+    EvalParamNumErr {
+        expected: usize,
+        got: usize,
     },
 }
 
@@ -60,9 +67,36 @@ impl MonkeyErr {
     }
 }
 
+impl PartialEq for MonkeyErr {
+    fn eq(&self, other: &Self) -> bool {
+        use MonkeyErr::*;
+        match (&self, other) {
+            (NoneErr, NoneErr) => true,
+            (IOErr(_), IOErr(_)) => true,
+            (FmtErr(_), FmtErr(_)) => true,
+            (CannotConvertStringErr { .. }, CannotConvertStringErr { .. }) => true,
+            (CannotConvertSymbolErr { .. }, CannotConvertSymbolErr { .. }) => true,
+            (PrefixParseNoneErr { .. }, PrefixParseNoneErr { .. }) => true,
+            (InfixParseNoneErr { .. }, InfixParseNoneErr { .. }) => true,
+            (ParseExprErr { .. }, ParseExprErr { .. }) => true,
+            (ParseTokDiffErr { .. }, ParseTokDiffErr { .. }) => true,
+            (EvalUnknownPrefix { .. }, EvalUnknownPrefix { .. }) => true,
+            (EvalUnknownInfix { .. }, EvalUnknownInfix { .. }) => true,
+            (EvalTypeMismatch { .. }, EvalTypeMismatch { .. }) => true,
+            (EvalPowErr { .. }, EvalPowErr { .. }) => true,
+            (EvalIdentNotFound { .. }, EvalIdentNotFound { .. }) => true,
+            (EvalNotFunction, EvalNotFunction) => true,
+            (EvalArgErr { .. }, EvalArgErr { .. }) => true,
+            (EvalParamNumErr { .. }, EvalParamNumErr { .. }) => true,
+            _ => false,
+        }
+    }
+}
+
 impl Display for MonkeyErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            MonkeyErr::NoneErr => write!(f, "NoneError"),
             MonkeyErr::IOErr(ref e) => Display::fmt(e, f),
             MonkeyErr::FmtErr(ref e) => Display::fmt(e, f),
             MonkeyErr::CannotConvertStringErr { got } => {
@@ -125,7 +159,18 @@ impl Display for MonkeyErr {
             MonkeyErr::EvalIdentNotFound { name_got } => {
                 write!(f, "Identifier not found: {}", name_got)
             }
-            MonkeyErr::EvalNotFunction { got } => write!(f, "Not a function: {}", got.obj_type()),
+            MonkeyErr::EvalNotFunction => write!(f, "Attempted to call non-function"),
+            MonkeyErr::EvalArgErr { fnt_name, got } => write!(
+                f,
+                "Argument `{0}` not supported, got {1}",
+                fnt_name,
+                got.obj_type()
+            ),
+            MonkeyErr::EvalParamNumErr { expected, got } => write!(
+                f,
+                "Wrong number of arguments, got={1}, want={0}",
+                expected, got
+            ),
         }
     }
 }

@@ -79,6 +79,7 @@ impl<'a> Lexer<'a> {
             ')' => Token::RPAREN,
             '{' => Token::LBRACE,
             '}' => Token::RBRACE,
+            '"' => self.read_string(),
             '\x00' => Token::EOF,
             _ if token::is_letter(self.ch) => {
                 let read_str = self.read_identifier();
@@ -104,6 +105,17 @@ impl<'a> Lexer<'a> {
         self.position -= 1;
         self.read_position -= 1;
         &self.input[position..=self.position]
+    }
+
+    fn read_string(&mut self) -> Token {
+        let position = self.position + 1;
+        loop {
+            self.read_char();
+            if self.ch == '"' || self.ch == '\x00' {
+                break;
+            }
+        }
+        Token::STRING(self.input[position..self.position].to_string())
     }
 
     // Add lexing an imeginary part of complex number

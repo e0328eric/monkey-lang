@@ -79,6 +79,8 @@ impl<'a> Lexer<'a> {
             ')' => Token::RPAREN,
             '{' => Token::LBRACE,
             '}' => Token::RBRACE,
+            '[' => Token::LBRACKET,
+            ']' => Token::RBRACKET,
             '"' => self.read_string(),
             '\x00' => Token::EOF,
             _ if token::is_letter(self.ch) => {
@@ -186,6 +188,9 @@ fn more_complex_lex() {
     10 == 10;
     10 != 9;
     1 + 2i;
+    "foobar";
+    "foo bar";
+    [1,2];
     "#;
     let lex = Lexer::new(&input).collect::<Vec<Token>>();
     let expected = vec![
@@ -269,6 +274,16 @@ fn more_complex_lex() {
         Token::INT(1),
         Token::PLUS,
         Token::IMEGINARY(2),
+        Token::SEMICOLON,
+        Token::STRING("foobar".to_string()),
+        Token::SEMICOLON,
+        Token::STRING("foo bar".to_string()),
+        Token::SEMICOLON,
+        Token::LBRACKET,
+        Token::INT(1),
+        Token::COMMA,
+        Token::INT(2),
+        Token::RBRACKET,
         Token::SEMICOLON,
         Token::EOF,
     ];

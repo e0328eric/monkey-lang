@@ -2,7 +2,7 @@ use crate::error;
 
 type Error = error::MonkeyErr;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     ILLIGAL,
     EOF,
@@ -13,26 +13,28 @@ pub enum Token {
     IMEGINARY(i64),
 
     // Operations
-    ASSIGN,
-    PLUS,
-    MINUS,
-    BANG,
-    ASTERISK,
-    SLASH,
-    POWER,
-    LT,
-    GT,
-    EQ,
-    NOTEQ,
+    ASSIGN,   // =
+    PLUS,     // +
+    MINUS,    // -
+    BANG,     // !
+    ASTERISK, // *
+    SLASH,    // /
+    POWER,    // **
+    LT,       // <
+    GT,       // >
+    EQ,       // ==
+    NOTEQ,    // !=
 
     // Delimiters
-    COMMA,
-    SEMICOLON,
+    COMMA,     // ,
+    SEMICOLON, // ;
 
-    LPAREN,
-    RPAREN,
-    LBRACE,
-    RBRACE,
+    LPAREN,   // (
+    RPAREN,   // )
+    LBRACE,   // {
+    RBRACE,   // }
+    LBRACKET, // [
+    RBRACKET, // ]
 
     // Keywords
     FUNCTION,
@@ -55,6 +57,16 @@ impl Token {
             "true" => Some(Token::TRUE),
             "false" => Some(Token::FALSE),
             _ => None,
+        }
+    }
+
+    pub fn is_same_type(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Token::IDENT(_), Token::IDENT(_)) => true,
+            (Token::STRING(_), Token::STRING(_)) => true,
+            (Token::INT(_), Token::INT(_)) => true,
+            (Token::IMEGINARY(_), Token::IMEGINARY(_)) => true,
+            _ => self == other,
         }
     }
 

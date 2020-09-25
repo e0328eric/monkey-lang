@@ -16,6 +16,7 @@ pub enum Expression {
     String(String),
     Boolean(bool),
     Integer(i64),
+    Array(Vec<Expression>),
     // Yet a complex number is just implemented with integer values
     Complex {
         re: i64,
@@ -67,6 +68,7 @@ pub enum Precedence {
     POWER,
     PREFIX,
     CALL,
+    INDEX,
 }
 
 impl Precedence {
@@ -82,6 +84,7 @@ impl Precedence {
             Token::SLASH => Precedence::PRODUCT,
             Token::POWER => Precedence::POWER,
             Token::LPAREN => Precedence::CALL,
+            Token::LBRACKET => Precedence::INDEX,
             _ => Precedence::LOWEST,
         }
     }

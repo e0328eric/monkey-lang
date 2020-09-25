@@ -30,6 +30,7 @@ pub fn eval(node: Statement, env: &mut Environment) -> error::Result<Object> {
             Expression::Integer(value) => Ok(Object::Integer(value)),
             Expression::Complex { re, im } => Ok(Object::Complex(re, im)),
             Expression::Ident(value) => eval_identifier(value, env),
+            Expression::Array(exprs) => Ok(Object::Array(eval_exprs(exprs, env)?)),
             Expression::Boolean(value) => {
                 if value {
                     Ok(TRUE)
@@ -45,7 +46,13 @@ pub fn eval(node: Statement, env: &mut Environment) -> error::Result<Object> {
                 left,
                 operator,
                 right,
-            } => eval_infix_expr(operator, eval(left.into(), env)?, eval(right.into(), env)?),
+            } => {
+                if operator == Token::LBRACKET {
+                    eval_index_eval(eval(left.into(), env)?, eval(right.into(), env)?)
+                } else {
+                    eval_infix_expr(operator, eval(left.into(), env)?, eval(right.into(), env)?)
+                }
+            }
             Expression::IfExpr {
                 condition,
                 consequence,
@@ -122,6 +129,23 @@ fn eval_stmts(block: BlockStmt, env: &mut Environment) -> error::Result<Object> 
     Ok(result)
 }
 
+fn eval_index_eval(left: Object, index: Object) -> error::Result<Object> {
+    if let (Object::Array(lst), Object::Integer(n)) = (&left, index) {
+        if n < 0 {
+            Ok(NULL)
+        } else {
+            let n = n as usize;
+            if n > lst.len() {
+                Ok(NULL)
+            } else {
+                Ok(lst[n].clone())
+            }
+        }
+    } else {
+        Err(Error::EvalIndexOpErr { got: left.clone() })
+    }
+}
+
 fn eval_prefix_expr(operator: Token, right: Object) -> error::Result<Object> {
     match operator {
         Token::BANG => eval_bang_operator_expr(right),
@@ -131,50 +155,48 @@ fn eval_prefix_expr(operator: Token, right: Object) -> error::Result<Object> {
 }
 
 fn eval_infix_expr(operator: Token, left: Object, right: Object) -> error::Result<Object> {
-    match (&left, &right) {
-        (Object::Integer(_), Object::Integer(_))
-        | (Object::Integer(_), Object::Complex(_, _))
-        | (Object::Complex(_, _), Object::Integer(_))
-        | (Object::Complex(_, _), Object::Complex(_, _)) => {
-            eval_num_infix_expr(operator, left, right)
-        }
-        (Object::String(s1), Object::String(s2)) => {
-            if let Token::PLUS = operator {
-                Ok(Object::String(s1.to_string() + s2))
-            } else {
-                Err(Error::EvalUnknownInfix {
+    if left.to_complex().is_some() && right.to_complex().is_some() {
+        eval_num_infix_expr(operator, left, right)
+    } else {
+        match (&left, &right) {
+            (Object::String(s1), Object::String(s2)) => {
+                if let Token::PLUS = operator {
+                    Ok(Object::String(s1.to_string() + s2))
+                } else {
+                    Err(Error::EvalUnknownInfix {
+                        left,
+                        operator,
+                        right,
+                    })
+                }
+            }
+            _ if Object::is_same_type(&left, &right) => match operator {
+                Token::EQ => {
+                    if left == right {
+                        Ok(TRUE)
+                    } else {
+                        Ok(FALSE)
+                    }
+                }
+                Token::NOTEQ => {
+                    if left != right {
+                        Ok(TRUE)
+                    } else {
+                        Ok(FALSE)
+                    }
+                }
+                _ => Err(Error::EvalUnknownInfix {
                     left,
                     operator,
                     right,
-                })
-            }
-        }
-        _ if Object::is_same_type(&left, &right) => match operator {
-            Token::EQ => {
-                if left == right {
-                    Ok(TRUE)
-                } else {
-                    Ok(FALSE)
-                }
-            }
-            Token::NOTEQ => {
-                if left != right {
-                    Ok(TRUE)
-                } else {
-                    Ok(FALSE)
-                }
-            }
-            _ => Err(Error::EvalUnknownInfix {
+                }),
+            },
+            _ => Err(Error::EvalTypeMismatch {
                 left,
                 operator,
                 right,
             }),
-        },
-        _ => Err(Error::EvalTypeMismatch {
-            left,
-            operator,
-            right,
-        }),
+        }
     }
 }
 
@@ -645,6 +667,33 @@ mod test {
                 Object::DeclareVariable,
                 Object::Integer(22),
                 Object::Integer(5),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn eval_array() -> error::Result<()> {
+        let mut env = Environment::new();
+        let input: Vec<_> = Parser::new(Lexer::new(
+            r#"
+            [1, 2 * 2, 3 + 3];
+            [1, 2 * 2, 3 + 3][1];
+            "#,
+        ))
+        .parse_program()?
+        .into_iter()
+        .map(|x| eval(x, &mut env))
+        .collect();
+        assert_eq!(
+            input,
+            vec![
+                Ok(Object::Array(vec![
+                    Object::Integer(1),
+                    Object::Integer(4),
+                    Object::Integer(6),
+                ])),
+                Ok(Object::Integer(4))
             ]
         );
         Ok(())

@@ -9,14 +9,10 @@ type Error = error::MonkeyErr;
 type PrefixParseFn = fn(&mut Parser) -> error::Result<Expression>;
 type InfixParseFn = fn(&mut Parser, &Expression) -> error::Result<Expression>;
 
-pub struct Parser {
-    l: Vec<Token>,
-    cur_position: usize,
-}
-
+// Macros
 macro_rules! expect_peek {
-    ($e: expr => $p: pat | $e1: expr) => {
-        if let $p = $e.take_token().1 {
+    ($e: expr => $e1: expr) => {
+        if $e.take_token().1.is_same_type(&$e1) {
             $e.next_token();
         } else {
             return Err(Error::ParseTokDiffErr {
@@ -27,27 +23,30 @@ macro_rules! expect_peek {
     };
 }
 
+macro_rules! check_position {
+    ($ident: ident := $self: expr, $num: expr) => {
+        let $ident = if $self.cur_position < $self.l.len() - $num {
+            &$self.l[$self.cur_position + $num]
+        } else {
+            &Token::EOF
+        };
+    };
+}
+
+pub struct Parser {
+    l: Vec<Token>,
+    cur_position: usize,
+}
+
 impl Parser {
     fn next_token(&mut self) {
         self.cur_position += 1;
     }
 
     fn take_token(&self) -> (&Token, &Token, &Token) {
-        let cur_tok = if self.cur_position >= self.l.len() {
-            &Token::EOF
-        } else {
-            &self.l[self.cur_position]
-        };
-        let peek_tok = if self.cur_position >= self.l.len() - 1 {
-            &Token::EOF
-        } else {
-            &self.l[self.cur_position + 1]
-        };
-        let twopeek_tok = if self.cur_position >= self.l.len() - 2 {
-            &Token::EOF
-        } else {
-            &self.l[self.cur_position + 2]
-        };
+        check_position!(cur_tok := self, 0);
+        check_position!(peek_tok := self, 1);
+        check_position!(twopeek_tok := self, 2);
         (cur_tok, peek_tok, twopeek_tok)
     }
 
@@ -76,6 +75,7 @@ impl Parser {
             Token::BANG => Some(Parser::parse_prefix_expr),
             Token::MINUS => Some(Parser::parse_prefix_expr),
             Token::LPAREN => Some(Parser::parse_grouped_expr),
+            Token::LBRACKET => Some(Parser::parse_array_expr),
             Token::IF => Some(Parser::parse_if_expr),
             Token::FUNCTION => Some(Parser::parse_function_literal),
             _ => None,
@@ -94,6 +94,7 @@ impl Parser {
             Token::GT => Some(Parser::parse_infix_expr),
             Token::POWER => Some(Parser::parse_infix_expr),
             Token::LPAREN => Some(Parser::parse_call_expr),
+            Token::LBRACKET => Some(Parser::parse_index_expr),
             _ => None,
         }
     }
@@ -104,6 +105,17 @@ impl Parser {
         } else {
             Err(Error::ParseExprErr {
                 expected: "identifier".to_string(),
+                got: self.take_token().0.clone(),
+            })
+        }
+    }
+
+    fn parse_string(&mut self) -> error::Result<Expression> {
+        if let Token::STRING(s) = self.take_token().0 {
+            Ok(Expression::String(s.to_string()))
+        } else {
+            Err(Error::ParseExprErr {
+                expected: "string".to_string(),
                 got: self.take_token().0.clone(),
             })
         }
@@ -140,17 +152,6 @@ impl Parser {
         Ok(expr)
     }
 
-    fn parse_string(&mut self) -> error::Result<Expression> {
-        if let Token::STRING(s) = self.take_token().0 {
-            Ok(Expression::String(s.to_string()))
-        } else {
-            Err(Error::ParseExprErr {
-                expected: "string".to_string(),
-                got: self.take_token().0.clone(),
-            })
-        }
-    }
-
     fn parse_boolean(&mut self) -> error::Result<Expression> {
         Ok(Expression::Boolean(self.take_token().0 == &Token::TRUE))
     }
@@ -167,26 +168,42 @@ impl Parser {
         self.next_token();
 
         let exp = self.parse_expression(Precedence::LOWEST)?;
-        expect_peek!(self => Token::RPAREN | Token::RPAREN);
+        expect_peek!(self => Token::RPAREN);
 
         Ok(exp)
     }
 
+    fn parse_array_expr(&mut self) -> error::Result<Expression> {
+        Ok(Expression::Array(self.parse_expr_list(Token::RBRACKET)?))
+    }
+
+    fn parse_index_expr(&mut self, left: &Expression) -> error::Result<Expression> {
+        self.next_token();
+        let right = Box::new(self.parse_expression(Precedence::LOWEST)?);
+        expect_peek!(self => Token::RBRACKET);
+
+        Ok(Expression::Infix {
+            left: Box::new(left.clone()),
+            operator: Token::LBRACKET,
+            right,
+        })
+    }
+
     fn parse_if_expr(&mut self) -> error::Result<Expression> {
-        expect_peek!(self => Token::LPAREN | Token::LPAREN);
+        expect_peek!(self => Token::LPAREN);
 
         self.next_token();
         let condition = Box::new(self.parse_expression(Precedence::LOWEST)?);
 
-        expect_peek!(self => Token::RPAREN | Token::RPAREN);
-        expect_peek!(self => Token::LBRACE | Token::LBRACE);
+        expect_peek!(self => Token::RPAREN);
+        expect_peek!(self => Token::LBRACE);
 
         let consequence = self.parse_block_statement()?;
         let mut alternative: BlockStmt = Vec::new();
 
         if self.take_token().1 == &Token::ELSE {
             self.next_token();
-            expect_peek!(self => Token::LBRACE | Token::LBRACE);
+            expect_peek!(self => Token::LBRACE);
             alternative = self.parse_block_statement()?;
         }
 
@@ -198,9 +215,9 @@ impl Parser {
     }
 
     fn parse_function_literal(&mut self) -> error::Result<Expression> {
-        expect_peek!(self => Token::LPAREN | Token::LPAREN);
+        expect_peek!(self => Token::LPAREN);
         let parameters = self.parse_function_parameters()?;
-        expect_peek!(self => Token::LBRACE | Token::LBRACE);
+        expect_peek!(self => Token::LBRACE);
         let body = self.parse_block_statement()?;
 
         Ok(Expression::Function { parameters, body })
@@ -222,7 +239,7 @@ impl Parser {
             identifiers.push(self.take_token().0.unwrap_string()?);
         }
 
-        expect_peek!(self => Token::RPAREN | Token::RPAREN);
+        expect_peek!(self => Token::RPAREN);
 
         Ok(identifiers)
     }
@@ -240,17 +257,17 @@ impl Parser {
     }
 
     fn parse_call_expr(&mut self, fnt: &Expression) -> error::Result<Expression> {
-        let arguments = self.parse_call_arguments()?;
+        let arguments = self.parse_expr_list(Token::RPAREN)?;
         Ok(Expression::Call {
             function: Box::new(fnt.clone()),
             arguments,
         })
     }
 
-    fn parse_call_arguments(&mut self) -> error::Result<Vec<Expression>> {
+    fn parse_expr_list(&mut self, end: Token) -> error::Result<Vec<Expression>> {
         let mut args: Vec<Expression> = Vec::new();
 
-        if self.take_token().1 == &Token::RPAREN {
+        if self.take_token().1 == &end {
             self.next_token();
             return Ok(args);
         }
@@ -264,7 +281,7 @@ impl Parser {
             args.push(self.parse_expression(Precedence::LOWEST)?);
         }
 
-        expect_peek!(self => Token::RPAREN | Token::RPAREN);
+        expect_peek!(self => end);
 
         Ok(args)
     }
@@ -291,9 +308,9 @@ impl Parser {
     }
 
     fn parse_let_stmt(&mut self) -> error::Result<Statement> {
-        expect_peek!(self => Token::IDENT(_) | Token::IDENT(String::new()));
+        expect_peek!(self => Token::IDENT(String::new()));
         let name = self.take_token().0.unwrap_string()?;
-        expect_peek!(self => Token::ASSIGN | Token::ASSIGN);
+        expect_peek!(self => Token::ASSIGN);
         self.next_token();
 
         let value = self.parse_expression(Precedence::LOWEST)?;
@@ -746,6 +763,52 @@ mod test {
                         right: Box::new(Expression::Integer(5))
                     }
                 ]
+            }
+        }
+    );
+
+    test_parser!(
+        parse_array => r#"
+            [1, 2*2, 3+3];
+            a * [1,2,3,4][b*c] * d;
+            "#;
+        Statement::ExpressionStmt {
+            expression: Expression::Array(vec![
+                Expression::Integer(1),
+                Expression::Infix {
+                    left: Box::new(Expression::Integer(2)),
+                    operator: Token::ASTERISK,
+                    right: Box::new(Expression::Integer(2))
+                },
+                Expression::Infix {
+                    left: Box::new(Expression::Integer(3)),
+                    operator: Token::PLUS,
+                    right: Box::new(Expression::Integer(3))
+                },
+            ]),
+        },
+        Statement::ExpressionStmt {
+            expression: Expression::Infix {
+                left: Box::new(Expression::Infix {
+                    left: Box::new(Expression::Ident("a".to_string())),
+                    operator: Token::ASTERISK,
+                    right: Box::new(Expression::Infix {
+                        left: Box::new(Expression::Array(vec![
+                            Expression::Integer(1),
+                            Expression::Integer(2),
+                            Expression::Integer(3),
+                            Expression::Integer(4),
+                        ])),
+                        operator: Token::LBRACKET,
+                        right: Box::new(Expression::Infix {
+                            left: Box::new(Expression::Ident("b".to_string())),
+                            operator: Token::ASTERISK,
+                            right: Box::new(Expression::Ident("c".to_string())),
+                        })
+                    })
+                }),
+                operator: Token::ASTERISK,
+                right: Box::new(Expression::Ident("d".to_string())),
             }
         }
     );

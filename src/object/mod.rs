@@ -10,6 +10,7 @@ pub enum Object {
     Integer(i64),
     Complex(i64, i64),
     Boolean(bool),
+    Array(Vec<Object>),
     ReturnValue(Box<Object>),
     Function {
         parameters: Vec<String>,
@@ -32,6 +33,7 @@ impl Object {
             Object::String { .. } => "STRING".to_string(),
             Object::Complex { .. } => "COMPLEX".to_string(),
             Object::Boolean { .. } => "BOOLEAN".to_string(),
+            Object::Array { .. } => "ARRAY".to_string(),
             Object::ReturnValue { .. } => "RETURN".to_string(),
             Object::Function { .. } => "FUNCTION".to_string(),
             Object::BuiltinFnt { .. } => "BUILTIN".to_string(),
@@ -68,6 +70,16 @@ impl fmt::Display for Object {
                 }
             }
             Object::Boolean(value) => write!(f, "{}", value),
+            Object::Array(lst) => {
+                let mut print_str = String::from("[");
+                for l in lst {
+                    print_str += &format!("{}, ", l);
+                }
+                print_str.pop();
+                print_str.pop();
+                print_str += "]";
+                write!(f, "{}", print_str)
+            }
             Object::ReturnValue(value) => write!(f, "{}", *value),
             Object::Function { .. } => write!(f, ""),
             Object::BuiltinFnt { .. } => write!(f, ""),
@@ -131,7 +143,7 @@ impl Builtin {
                     })
                 }
             }
-            Builtin::ConvertErr => Err(MonkeyErr::NoneErr),
+            Builtin::ConvertErr => Err(MonkeyErr::EvalBuiltinErr),
             _ => Ok(NULL),
         }
     }

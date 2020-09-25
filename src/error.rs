@@ -4,7 +4,6 @@ use crate::lexer::token::Token;
 use crate::object::Object;
 
 pub enum MonkeyErr {
-    NoneErr, // This error is only for blank error
     // These two errors are critical errors so that the program panics
     IOErr(std::io::Error),
     FmtErr(fmt::Error),
@@ -56,6 +55,10 @@ pub enum MonkeyErr {
         expected: usize,
         got: usize,
     },
+    EvalBuiltinErr,
+    EvalIndexOpErr {
+        got: Object,
+    },
 }
 
 impl MonkeyErr {
@@ -67,36 +70,31 @@ impl MonkeyErr {
     }
 }
 
-impl PartialEq for MonkeyErr {
-    fn eq(&self, other: &Self) -> bool {
-        use MonkeyErr::*;
-        match (&self, other) {
-            (NoneErr, NoneErr) => true,
-            (IOErr(_), IOErr(_)) => true,
-            (FmtErr(_), FmtErr(_)) => true,
-            (CannotConvertStringErr { .. }, CannotConvertStringErr { .. }) => true,
-            (CannotConvertSymbolErr { .. }, CannotConvertSymbolErr { .. }) => true,
-            (PrefixParseNoneErr { .. }, PrefixParseNoneErr { .. }) => true,
-            (InfixParseNoneErr { .. }, InfixParseNoneErr { .. }) => true,
-            (ParseExprErr { .. }, ParseExprErr { .. }) => true,
-            (ParseTokDiffErr { .. }, ParseTokDiffErr { .. }) => true,
-            (EvalUnknownPrefix { .. }, EvalUnknownPrefix { .. }) => true,
-            (EvalUnknownInfix { .. }, EvalUnknownInfix { .. }) => true,
-            (EvalTypeMismatch { .. }, EvalTypeMismatch { .. }) => true,
-            (EvalPowErr { .. }, EvalPowErr { .. }) => true,
-            (EvalIdentNotFound { .. }, EvalIdentNotFound { .. }) => true,
-            (EvalNotFunction, EvalNotFunction) => true,
-            (EvalArgErr { .. }, EvalArgErr { .. }) => true,
-            (EvalParamNumErr { .. }, EvalParamNumErr { .. }) => true,
-            _ => false,
-        }
-    }
-}
+impl_partialeq!(
+    MonkeyErr |
+    MonkeyErr::IOErr(_),
+    MonkeyErr::FmtErr(_),
+    MonkeyErr::CannotConvertStringErr { .. },
+    MonkeyErr::CannotConvertSymbolErr { .. },
+    MonkeyErr::PrefixParseNoneErr { .. },
+    MonkeyErr::InfixParseNoneErr { .. },
+    MonkeyErr::ParseExprErr { .. },
+    MonkeyErr::ParseTokDiffErr { .. },
+    MonkeyErr::EvalUnknownPrefix { .. },
+    MonkeyErr::EvalUnknownInfix { .. },
+    MonkeyErr::EvalTypeMismatch { .. },
+    MonkeyErr::EvalPowErr { .. },
+    MonkeyErr::EvalIdentNotFound { .. },
+    MonkeyErr::EvalNotFunction,
+    MonkeyErr::EvalArgErr { .. },
+    MonkeyErr::EvalParamNumErr { .. },
+    MonkeyErr::EvalBuiltinErr,
+    MonkeyErr::EvalIndexOpErr { .. }
+);
 
 impl Display for MonkeyErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MonkeyErr::NoneErr => write!(f, "NoneError"),
             MonkeyErr::IOErr(ref e) => Display::fmt(e, f),
             MonkeyErr::FmtErr(ref e) => Display::fmt(e, f),
             MonkeyErr::CannotConvertStringErr { got } => {
@@ -171,6 +169,10 @@ impl Display for MonkeyErr {
                 "Wrong number of arguments, got={1}, want={0}",
                 expected, got
             ),
+            MonkeyErr::EvalBuiltinErr => write!(f, "Evaluate with non-builtin function"),
+            MonkeyErr::EvalIndexOpErr { got } => {
+                write!(f, "Index operator not supported: {}", got.obj_type())
+            }
         }
     }
 }

@@ -71,25 +71,25 @@ impl MonkeyErr {
 }
 
 impl_partialeq!(
-    MonkeyErr |
-    MonkeyErr::IOErr(_),
-    MonkeyErr::FmtErr(_),
-    MonkeyErr::CannotConvertStringErr { .. },
-    MonkeyErr::CannotConvertSymbolErr { .. },
-    MonkeyErr::PrefixParseNoneErr { .. },
-    MonkeyErr::InfixParseNoneErr { .. },
-    MonkeyErr::ParseExprErr { .. },
-    MonkeyErr::ParseTokDiffErr { .. },
-    MonkeyErr::EvalUnknownPrefix { .. },
-    MonkeyErr::EvalUnknownInfix { .. },
-    MonkeyErr::EvalTypeMismatch { .. },
-    MonkeyErr::EvalPowErr { .. },
-    MonkeyErr::EvalIdentNotFound { .. },
-    MonkeyErr::EvalNotFunction,
-    MonkeyErr::EvalArgErr { .. },
-    MonkeyErr::EvalParamNumErr { .. },
-    MonkeyErr::EvalBuiltinErr,
-    MonkeyErr::EvalIndexOpErr { .. }
+    MonkeyErr =>>
+    IOErr(_),
+    FmtErr(_),
+    CannotConvertStringErr { .. },
+    CannotConvertSymbolErr { .. },
+    PrefixParseNoneErr { .. },
+    InfixParseNoneErr { .. },
+    ParseExprErr { .. },
+    ParseTokDiffErr { .. },
+    EvalUnknownPrefix { .. },
+    EvalUnknownInfix { .. },
+    EvalTypeMismatch { .. },
+    EvalPowErr { .. },
+    EvalIdentNotFound { .. },
+    EvalNotFunction,
+    EvalArgErr { .. },
+    EvalParamNumErr { .. },
+    EvalBuiltinErr,
+    EvalIndexOpErr { .. }
 );
 
 impl Display for MonkeyErr {

@@ -1,6 +1,7 @@
 use crate::error;
 use crate::lexer::token::Token;
-use crate::object::{Builtin, Environment, Object, FALSE, NULL, TRUE};
+use crate::object::builtin::Builtin;
+use crate::object::{Environment, Object, FALSE, NULL, TRUE};
 use crate::parser::ast::*;
 
 type Error = crate::error::MonkeyErr;
@@ -154,37 +155,40 @@ fn eval_prefix_expr(operator: Token, right: Object) -> error::Result<Object> {
     }
 }
 
+fn eval_string_concat(operator: Token, left: &str, right: &str) -> error::Result<Object> {
+    if operator == Token::PLUS {
+        Ok(Object::String(left.to_string() + right))
+    } else {
+        Err(Error::EvalUnknownInfix {
+            left: Object::String(left.to_string()),
+            operator,
+            right: Object::String(right.to_string()),
+        })
+    }
+}
+
+fn eval_array_concat(operator: Token, left: &[Object], right: &[Object]) -> error::Result<Object> {
+    if operator == Token::PLUS {
+        Ok(Object::Array([left, right].concat().to_vec()))
+    } else {
+        Err(Error::EvalUnknownInfix {
+            left: Object::Array(left.to_vec()),
+            operator,
+            right: Object::Array(right.to_vec()),
+        })
+    }
+}
+
 fn eval_infix_expr(operator: Token, left: Object, right: Object) -> error::Result<Object> {
     if left.to_complex().is_some() && right.to_complex().is_some() {
         eval_num_infix_expr(operator, left, right)
     } else {
         match (&left, &right) {
-            (Object::String(s1), Object::String(s2)) => {
-                if let Token::PLUS = operator {
-                    Ok(Object::String(s1.to_string() + s2))
-                } else {
-                    Err(Error::EvalUnknownInfix {
-                        left,
-                        operator,
-                        right,
-                    })
-                }
-            }
+            (Object::String(s1), Object::String(s2)) => eval_string_concat(operator, s1, s2),
+            (Object::Array(lst1), Object::Array(lst2)) => eval_array_concat(operator, lst1, lst2),
             _ if Object::is_same_type(&left, &right) => match operator {
-                Token::EQ => {
-                    if left == right {
-                        Ok(TRUE)
-                    } else {
-                        Ok(FALSE)
-                    }
-                }
-                Token::NOTEQ => {
-                    if left != right {
-                        Ok(TRUE)
-                    } else {
-                        Ok(FALSE)
-                    }
-                }
+                Token::EQ => Ok((left == right).into()),
+                Token::NOTEQ => Ok((left != right).into()),
                 _ => Err(Error::EvalUnknownInfix {
                     left,
                     operator,

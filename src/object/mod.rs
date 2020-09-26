@@ -1,4 +1,5 @@
-use crate::error::{self, MonkeyErr};
+pub mod builtin;
+
 use crate::parser::ast::BlockStmt;
 use std::collections::HashMap;
 use std::fmt;
@@ -16,7 +17,7 @@ pub enum Object {
         parameters: Vec<String>,
         body: BlockStmt,
     },
-    BuiltinFnt(Builtin),
+    BuiltinFnt(builtin::Builtin),
     DeclareVariable, // This special object makes not to print the value of an expression
     Null,
 }
@@ -25,6 +26,17 @@ pub enum Object {
 pub const TRUE: Object = Object::Boolean(true);
 pub const FALSE: Object = Object::Boolean(false);
 pub const NULL: Object = Object::Null;
+
+// Transform boolean value to object bool
+impl From<bool> for Object {
+    fn from(boolean: bool) -> Self {
+        if boolean {
+            TRUE
+        } else {
+            FALSE
+        }
+    }
+}
 
 impl Object {
     pub fn obj_type(&self) -> String {
@@ -87,64 +99,6 @@ impl fmt::Display for Object {
             // If variables are declared, its variable should not be displayed.
             // So I set this with unreachable.
             Object::DeclareVariable => unreachable!(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Builtin {
-    ConvertErr, // This is only for error handle
-    Len,
-}
-
-// Take an equality between Bultin and String
-impl PartialEq<String> for Builtin {
-    fn eq(&self, other: &String) -> bool {
-        match other.as_str() {
-            "len" => *self == Builtin::Len,
-            _ => *self == Builtin::ConvertErr,
-        }
-    }
-}
-
-// This implementation needed because of proving the symmetric part
-impl PartialEq<Builtin> for String {
-    fn eq(&self, other: &Builtin) -> bool {
-        other == self
-    }
-}
-
-impl From<String> for Builtin {
-    fn from(value: String) -> Self {
-        match value.as_str() {
-            "len" => Builtin::Len,
-            _ => Builtin::ConvertErr,
-        }
-    }
-}
-
-impl Builtin {
-    pub fn apply(&self, args: Vec<Object>) -> error::Result<Object> {
-        match &self {
-            Builtin::Len => {
-                if args.len() != 1 {
-                    return Err(MonkeyErr::EvalParamNumErr {
-                        expected: 1,
-                        got: args.len(),
-                    });
-                }
-                let arg = &args[0];
-                if let Object::String(s) = arg {
-                    Ok(Object::Integer(s.chars().count() as i64))
-                } else {
-                    Err(MonkeyErr::EvalArgErr {
-                        fnt_name: "len".to_string(),
-                        got: arg.clone(),
-                    })
-                }
-            }
-            Builtin::ConvertErr => Err(MonkeyErr::EvalBuiltinErr),
-            _ => Ok(NULL),
         }
     }
 }

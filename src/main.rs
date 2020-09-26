@@ -1,7 +1,7 @@
 #![warn(rust_2018_idioms, clippy::all)]
 
 #[macro_use]
-mod implementation;
+mod macros;
 mod error;
 mod evaluator;
 mod lexer;

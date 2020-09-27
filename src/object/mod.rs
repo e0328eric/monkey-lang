@@ -12,6 +12,7 @@ pub enum Object {
     Complex(i64, i64),
     Boolean(bool),
     Array(Vec<Object>),
+    Hash(Vec<Object>, Vec<Object>),
     ReturnValue(Box<Object>),
     Function {
         parameters: Vec<String>,
@@ -26,6 +27,9 @@ pub enum Object {
 pub const TRUE: Object = Object::Boolean(true);
 pub const FALSE: Object = Object::Boolean(false);
 pub const NULL: Object = Object::Null;
+
+// Hashable object list
+pub const HASHABLE: [&str; 4] = ["INTEGER", "STRING", "BOOLEAN", "COMPLEX"];
 
 // Transform boolean value to object bool
 impl From<bool> for Object {
@@ -46,6 +50,7 @@ impl Object {
             Object::Complex { .. } => "COMPLEX".to_string(),
             Object::Boolean { .. } => "BOOLEAN".to_string(),
             Object::Array { .. } => "ARRAY".to_string(),
+            Object::Hash { .. } => "HASH".to_string(),
             Object::ReturnValue { .. } => "RETURN".to_string(),
             Object::Function { .. } => "FUNCTION".to_string(),
             Object::BuiltinFnt { .. } => "BUILTIN".to_string(),
@@ -90,6 +95,21 @@ impl fmt::Display for Object {
                 print_str.pop();
                 print_str.pop();
                 print_str += "]";
+                write!(f, "{}", print_str)
+            }
+            Object::Hash(key, value) => {
+                let mut print_str = String::from("{");
+                for (k, v) in key.iter().zip(value.iter()) {
+                    if let Object::String(_) = k {
+                        print_str += &format!("\"{}\": ", k);
+                    } else {
+                        print_str += &format!("{}: ", k);
+                    }
+                    print_str += &format!("{}, ", v);
+                }
+                print_str.pop();
+                print_str.pop();
+                print_str += "}";
                 write!(f, "{}", print_str)
             }
             Object::ReturnValue(value) => write!(f, "{}", *value),

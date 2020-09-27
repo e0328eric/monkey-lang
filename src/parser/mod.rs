@@ -51,6 +51,7 @@ impl Parser {
             Token::BANG => Some(Parser::parse_prefix_expr),
             Token::MINUS => Some(Parser::parse_prefix_expr),
             Token::LPAREN => Some(Parser::parse_grouped_expr),
+            Token::LBRACE => Some(Parser::parse_hash_expr),
             Token::LBRACKET => Some(Parser::parse_array_expr),
             Token::IF => Some(Parser::parse_if_expr),
             Token::FUNCTION => Some(Parser::parse_function_literal),
@@ -151,6 +152,28 @@ impl Parser {
 
     fn parse_array_expr(&mut self) -> error::Result<Expression> {
         Ok(Expression::Array(self.parse_expr_list(Token::RBRACKET)?))
+    }
+
+    fn parse_hash_expr(&mut self) -> error::Result<Expression> {
+        let mut key = Vec::<Expression>::new();
+        let mut value = Vec::<Expression>::new();
+
+        while self.take_token().1 != &Token::RBRACE {
+            self.next_token();
+            key.push(self.parse_expression(Precedence::LOWEST)?);
+            expect_peek!(self => Token::COLON);
+
+            self.next_token();
+            value.push(self.parse_expression(Precedence::LOWEST)?);
+
+            if self.take_token().1 != &Token::RBRACE {
+                expect_peek!(self => Token::COMMA);
+            }
+        }
+
+        expect_peek!(self => Token::RBRACE);
+
+        Ok(Expression::Hash { key, value })
     }
 
     fn parse_index_expr(&mut self, left: &Expression) -> error::Result<Expression> {
@@ -785,6 +808,26 @@ mod test {
                 }),
                 operator: Token::ASTERISK,
                 right: Box::new(Expression::Ident("d".to_string())),
+            }
+        }
+    );
+
+    test_parser!(
+        parse_hash => r#"
+            {"one": 1, "two": 2, "three": 3};
+            "#;
+        Statement::ExpressionStmt {
+            expression: Expression::Hash {
+                key: vec![
+                    Expression::String("one".to_string()),
+                    Expression::String("two".to_string()),
+                    Expression::String("three".to_string()),
+                ],
+                value: vec![
+                    Expression::Integer(1),
+                    Expression::Integer(2),
+                    Expression::Integer(3),
+                ]
             }
         }
     );

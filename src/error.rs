@@ -59,6 +59,10 @@ pub enum MonkeyErr {
     EvalIndexOpErr {
         got: Object,
     },
+    EvalHashPairErr,
+    EvalUnusableHashKeyErr {
+        got: Object,
+    },
 }
 
 impl MonkeyErr {
@@ -89,7 +93,9 @@ impl_partialeq!(
     EvalArgErr { .. },
     EvalParamNumErr { .. },
     EvalBuiltinErr,
-    EvalIndexOpErr { .. }
+    EvalIndexOpErr { .. },
+    EvalHashPairErr,
+    EvalUnusableHashKeyErr { .. }
 );
 
 impl Display for MonkeyErr {
@@ -172,6 +178,13 @@ impl Display for MonkeyErr {
             MonkeyErr::EvalBuiltinErr => write!(f, "Evaluate with non-builtin function"),
             MonkeyErr::EvalIndexOpErr { got } => {
                 write!(f, "Index operator not supported: {}", got.obj_type())
+            }
+            MonkeyErr::EvalHashPairErr => write!(
+                f,
+                "The number of keys and the numbers of values are different"
+            ),
+            MonkeyErr::EvalUnusableHashKeyErr { got } => {
+                write!(f, "Unusable as hash key: {}", got.obj_type())
             }
         }
     }

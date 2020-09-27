@@ -75,6 +75,7 @@ impl<'a> Lexer<'a> {
             '>' => Token::GT,
             ',' => Token::COMMA,
             ';' => Token::SEMICOLON,
+            ':' => Token::COLON,
             '(' => Token::LPAREN,
             ')' => Token::RPAREN,
             '{' => Token::LBRACE,
@@ -191,6 +192,7 @@ fn more_complex_lex() {
     "foobar";
     "foo bar";
     [1,2];
+    { "foo": "bar" };
     "#;
     let lex = Lexer::new(&input).collect::<Vec<Token>>();
     let expected = vec![
@@ -284,6 +286,12 @@ fn more_complex_lex() {
         Token::COMMA,
         Token::INT(2),
         Token::RBRACKET,
+        Token::SEMICOLON,
+        Token::LBRACE,
+        Token::STRING("foo".to_string()),
+        Token::COLON,
+        Token::STRING("bar".to_string()),
+        Token::RBRACE,
         Token::SEMICOLON,
         Token::EOF,
     ];

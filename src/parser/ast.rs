@@ -22,6 +22,10 @@ pub enum Expression {
         re: i64,
         im: i64,
     },
+    Hash {
+        key: Vec<Expression>,
+        value: Vec<Expression>,
+    },
     Prefix {
         operator: Token,
         right: Box<Expression>,

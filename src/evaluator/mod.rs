@@ -1,7 +1,7 @@
 use crate::error;
 use crate::lexer::token::Token;
 use crate::object::builtin::Builtin;
-use crate::object::{Environment, Object, FALSE, NULL, TRUE};
+use crate::object::{Environment, Object, FALSE, HASHABLE, NULL, TRUE};
 use crate::parser::ast::*;
 
 type Error = crate::error::MonkeyErr;
@@ -32,6 +32,9 @@ pub fn eval(node: Statement, env: &mut Environment) -> error::Result<Object> {
             Expression::Complex { re, im } => Ok(Object::Complex(re, im)),
             Expression::Ident(value) => eval_identifier(value, env),
             Expression::Array(exprs) => Ok(Object::Array(eval_exprs(exprs, env)?)),
+            Expression::Hash { key, value } => {
+                Ok(Object::Hash(eval_exprs(key, env)?, eval_exprs(value, env)?))
+            }
             Expression::Boolean(value) => {
                 if value {
                     Ok(TRUE)
@@ -131,19 +134,34 @@ fn eval_stmts(block: BlockStmt, env: &mut Environment) -> error::Result<Object> 
 }
 
 fn eval_index_eval(left: Object, index: Object) -> error::Result<Object> {
-    if let (Object::Array(lst), Object::Integer(n)) = (&left, index) {
-        if n < 0 {
-            Ok(NULL)
-        } else {
-            let n = n as usize;
-            if n > lst.len() {
+    match (&left, &index) {
+        (Object::Array(lst), Object::Integer(n)) => {
+            if *n < 0 {
                 Ok(NULL)
             } else {
-                Ok(lst[n].clone())
+                let n = *n as usize;
+                if n > lst.len() {
+                    Ok(NULL)
+                } else {
+                    Ok(lst[n].clone())
+                }
             }
         }
-    } else {
-        Err(Error::EvalIndexOpErr { got: left.clone() })
+        (Object::Hash(keys, vals), _) => {
+            if keys.len() != vals.len() {
+                Err(Error::EvalHashPairErr)
+            } else if !HASHABLE.contains(&index.obj_type().as_str()) {
+                Err(Error::EvalUnusableHashKeyErr { got: index.clone() })
+            } else {
+                let maybe_val = keys.iter().position(|x| x == &index);
+                if let Some(pos) = maybe_val {
+                    Ok(vals[pos].clone())
+                } else {
+                    Ok(NULL)
+                }
+            }
+        }
+        _ => Err(Error::EvalIndexOpErr { got: left.clone() }),
     }
 }
 
@@ -735,6 +753,23 @@ mod test {
                 }),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn eval_hash() -> error::Result<()> {
+        let mut env = Environment::new();
+        let input: Vec<_> = Parser::new(Lexer::new(
+            r#"
+            {"foo": 5}["foo"];
+            {"foo": 5}["bar"];
+            "#,
+        ))
+        .parse_program()?
+        .into_iter()
+        .map(|x| eval(x, &mut env))
+        .collect();
+        assert_eq!(input, vec![Ok(Object::Integer(5)), Ok(NULL),]);
         Ok(())
     }
 }

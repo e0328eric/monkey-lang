@@ -209,18 +209,3 @@ impl From<fmt::Error> for MonkeyErr {
 }
 
 pub type Result<T> = std::result::Result<T, MonkeyErr>;
-
-#[macro_export]
-macro_rules! handle_error {
-    ($handle: expr => $result: stmt) => {{
-        if let Err(error) = $handle {
-            if error.is_critical_err() {
-                panic!("{}", error);
-            } else {
-                eprintln!("{}", error);
-            }
-        } else {
-            $result
-        }
-    }};
-}

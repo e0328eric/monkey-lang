@@ -55,4 +55,19 @@ macro_rules! impl_partialeq {
         }
     }
 }
+
+#[macro_export]
+macro_rules! handle_error {
+    ($handle: expr => $result: stmt) => {{
+        if let Err(error) = $handle {
+            if error.is_critical_err() {
+                panic!("{}", error);
+            } else {
+                eprintln!("{}", error);
+            }
+        } else {
+            $result
+        }
+    }};
+}
 // Error End

@@ -9,27 +9,8 @@ pub enum Builtin {
     Last,
     Rest,
     Push,
-}
-
-// Take an equality between Bultin and String
-impl PartialEq<String> for Builtin {
-    fn eq(&self, other: &String) -> bool {
-        match other.as_str() {
-            "len" => *self == Builtin::Len,
-            "first" => *self == Builtin::First,
-            "last" => *self == Builtin::Last,
-            "rest" => *self == Builtin::Rest,
-            "push" => *self == Builtin::Push,
-            _ => *self == Builtin::ConvertErr,
-        }
-    }
-}
-
-// This implementation needed because of proving the symmetric part
-impl PartialEq<Builtin> for String {
-    fn eq(&self, other: &Builtin) -> bool {
-        other == self
-    }
+    Puts, // stdout
+    Gets, // stdin
 }
 
 impl From<String> for Builtin {
@@ -40,14 +21,36 @@ impl From<String> for Builtin {
             "last" => Builtin::Last,
             "rest" => Builtin::Rest,
             "push" => Builtin::Push,
+            "puts" => Builtin::Puts,
+            "gets" => Builtin::Gets,
             _ => Builtin::ConvertErr,
         }
     }
 }
 
+impl From<&String> for Builtin {
+    fn from(value: &String) -> Self {
+        value.to_string().into()
+    }
+}
+
+// Take an equality between Bultin and String
+impl PartialEq<String> for Builtin {
+    fn eq(&self, other: &String) -> bool {
+        self == &Builtin::from(other)
+    }
+}
+
+// This implementation needed because of proving the symmetric part
+impl PartialEq<Builtin> for String {
+    fn eq(&self, other: &Builtin) -> bool {
+        other == self
+    }
+}
+
 impl Builtin {
     pub fn apply(&self, args: Vec<Object>) -> error::Result<Object> {
-        match &self {
+        match self {
             Builtin::Len => {
                 check_arg_len!(args, 1);
                 let arg = &args[0];
@@ -126,7 +129,19 @@ impl Builtin {
                     }),
                 }
             }
-            Builtin::ConvertErr => Err(MonkeyErr::EvalBuiltinErr),
+            Builtin::Puts => {
+                check_arg_len!(args, 1);
+                println!("{}", &args[0]);
+                Ok(NULL)
+            }
+            Builtin::Gets => {
+                check_arg_len!(args, 0);
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+                input.pop(); // Remove \n token
+                Ok(Object::String(input))
+            }
+            _ => Err(MonkeyErr::EvalBuiltinErr),
         }
     }
 }

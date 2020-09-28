@@ -79,7 +79,11 @@ impl fmt::Display for Object {
             Object::Integer(value) => write!(f, "{}", value),
             Object::Complex(re, im) => {
                 if *re == 0 {
-                    write!(f, "{}i", im)
+                    if *im == 0 {
+                        write!(f, "0")
+                    } else {
+                        write!(f, "{}i", im)
+                    }
                 } else if *im >= 0 {
                     write!(f, "({0}+{1}i)", re, im)
                 } else {

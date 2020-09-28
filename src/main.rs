@@ -45,11 +45,13 @@ fn main() {
                     given_str += &line;
                 }
                 rl.add_history_entry(&given_str);
-                let parsed = Parser::new(Lexer::new(&given_str)).parse_program();
-                handle_error!(parsed => {
-                    let object = evaluator::eval_program(parsed.unwrap(), &mut env);
-                    handle_error!(object => print_object(object.unwrap()));
-                });
+                if !given_str.is_empty() {
+                    let parsed = Parser::new(Lexer::new(&given_str)).parse_program();
+                    handle_error!(parsed => {
+                        let object = evaluator::eval_program(parsed.unwrap(), &mut env);
+                        handle_error!(object => print_object(object.unwrap()));
+                    });
+                }
             }
             Err(ReadlineError::Interrupted) => break,
             Err(ReadlineError::Eof) => break,

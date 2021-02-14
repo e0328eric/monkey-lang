@@ -3,16 +3,13 @@ mod evaluator_test;
 
 use crate::error;
 use crate::lexer::token::Token;
-use crate::object::{EnvWrapper, Environment, FunctionObj, Object};
+use crate::object::builtin::BuiltInFnt;
+use crate::object::*;
 use crate::parser::ast::{BlockStmt, Expression, Program, Statement};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 type Error = error::MonkeyErr;
-
-const TRUE: Object = Object::Boolean(true);
-const FALSE: Object = Object::Boolean(false);
-const NULL: Object = Object::Null;
 
 pub trait Evaluatable {
   fn eval(&self, env: &EnvWrapper) -> error::Result<Object>;
@@ -68,6 +65,7 @@ impl Evaluatable for Expression {
       Self::Ident(string) => eval_ident(string, env),
       Self::Integer(n) => Ok(Object::Integer(*n)),
       Self::Boolean(b) => Ok(if *b { TRUE } else { FALSE }),
+      Self::String(s) => Ok(Object::String(s.clone())),
       Self::Prefix { operator, right } => eval_prefix_expression(operator, (*right).eval(env)?),
       Self::IfExpr {
         condition,
@@ -102,12 +100,18 @@ impl Evaluatable for Expression {
 
 fn eval_ident(string: &str, env: &EnvWrapper) -> error::Result<Object> {
   let val = env.as_ref().borrow().get(string);
-  if val.is_none() {
-    return Err(Error::EvalErr {
-      msg: format!("identifier not found: {}", string),
-    });
+  if let Some(v) = val {
+    return Ok(v);
   }
-  Ok(val.unwrap())
+
+  let builtin: BuiltInFnt = string.into();
+  if builtin != BuiltInFnt::NotBuiltIn {
+    return Ok(Object::BuiltIn(builtin));
+  }
+
+  Err(Error::EvalErr {
+    msg: format!("identifier not found: {}", string),
+  })
 }
 
 fn eval_prefix_expression(operator: &Token, right: Object) -> error::Result<Object> {
@@ -137,6 +141,7 @@ fn eval_infix_expression(left: Object, operator: &Token, right: Object) -> error
     (Object::Integer(_), Object::Integer(_)) => {
       eval_integer_infix_expression(left, operator, right)
     }
+    (Object::String(_), Object::String(_)) => eval_string_infix_expression(left, operator, right),
     _ if left.r#type() != right.r#type() => Err(Error::EvalErr {
       msg: format!(
         "type mismatch: {} {:?} {}",
@@ -180,12 +185,12 @@ fn eval_integer_infix_expression(
   let lv = if let Object::Integer(lv) = left {
     lv
   } else {
-    unreachable!()
+    unreachable!();
   };
   let rv = if let Object::Integer(rv) = right {
     rv
   } else {
-    unreachable!()
+    unreachable!();
   };
   match operator {
     Token::PLUS => Ok(Object::Integer(lv + rv)),
@@ -205,6 +210,36 @@ fn eval_integer_infix_expression(
       ),
     }),
   }
+}
+
+fn eval_string_infix_expression(
+  left: Object,
+  operator: &Token,
+  right: Object,
+) -> error::Result<Object> {
+  if operator != &Token::PLUS {
+    return Err(Error::EvalErr {
+      msg: format!(
+        "unknown operator: {} {:?} {}",
+        left.r#type(),
+        operator,
+        right.r#type()
+      ),
+    });
+  }
+
+  let left_val = if let Object::String(s) = left {
+    s
+  } else {
+    unreachable!();
+  };
+  let right_val = if let Object::String(s) = right {
+    s
+  } else {
+    unreachable!();
+  };
+
+  Ok(Object::String(left_val + &right_val))
 }
 
 #[allow(clippy::ptr_arg)]
@@ -233,17 +268,18 @@ fn eval_expressions(arguments: &[Expression], env: &EnvWrapper) -> error::Result
 }
 
 fn apply_function(fnt: Object, args: Vec<Object>) -> error::Result<Object> {
-  let function = if let Object::Function(f) = fnt {
-    f
-  } else {
-    return Err(Error::EvalErr {
+  match fnt {
+    Object::Function(f) => {
+      let function = f;
+      let extended_env = extended_fnt_env(&function, args)?;
+      let evaluated = function.get_body().eval(&extended_env)?;
+      Ok(unwrap_return_value(evaluated))
+    }
+    Object::BuiltIn(built) => Ok(built.call(args)?),
+    _ => Err(Error::EvalErr {
       msg: format!("Not a function: {:?}", fnt.r#type()),
-    });
-  };
-
-  let extended_env = extended_fnt_env(&function, args)?;
-  let evaluated = function.get_body().eval(&extended_env)?;
-  Ok(unwrap_return_value(evaluated))
+    }),
+  }
 }
 
 fn extended_fnt_env(function: &FunctionObj, mut args: Vec<Object>) -> error::Result<EnvWrapper> {

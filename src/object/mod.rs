@@ -1,3 +1,5 @@
+pub mod builtin;
+
 use crate::parser::ast::*;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -6,18 +8,26 @@ use std::rc::{Rc, Weak};
 pub enum Object {
   Integer(i64),
   Boolean(bool),
+  String(String),
   ReturnValue(Box<Object>),
   Function(Box<FunctionObj>),
+  BuiltIn(builtin::BuiltInFnt),
   DeclareVariable,
   Null,
 }
+
+pub const TRUE: Object = Object::Boolean(true);
+pub const FALSE: Object = Object::Boolean(false);
+pub const NULL: Object = Object::Null;
 
 impl PartialEq for Object {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
       (Self::Integer(n1), Self::Integer(n2)) => n1 == n2,
       (Self::Boolean(b1), Self::Boolean(b2)) => b1 == b2,
+      (Self::String(s1), Self::String(s2)) => s1 == s2,
       (Self::ReturnValue(o1), Self::ReturnValue(o2)) => o1 == o2,
+      (Self::BuiltIn(b1), Self::BuiltIn(b2)) => b1 == b2,
       (Self::DeclareVariable, Self::DeclareVariable) => true,
       (Self::Null, Self::Null) => true,
       _ => false,
@@ -60,8 +70,10 @@ impl Object {
     match self {
       Self::Integer(_) => "integer",
       Self::Boolean(_) => "boolean",
+      Self::String(_) => "string",
       Self::ReturnValue(_) => "return_value",
       Self::Function(_) => "function",
+      Self::BuiltIn(built) => (*built).into(),
       Self::DeclareVariable => "declare",
       Self::Null => "null",
     }

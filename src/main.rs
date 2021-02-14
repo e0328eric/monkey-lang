@@ -10,12 +10,15 @@ mod parser;
 
 use crate::evaluator::Evaluatable;
 use crate::lexer::Lexer;
-use crate::object::Object;
+use crate::object::{Environment, Object};
 use crate::parser::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn main() {
+  let env = Rc::new(RefCell::new(Environment::new()));
   let mut rl = Editor::<()>::new();
   loop {
     let readline = rl.readline(">> ");
@@ -48,7 +51,7 @@ fn main() {
         if !given_str.is_empty() {
           let parsed = Parser::new(Lexer::new(&given_str)).parse_program();
           handle_error!(parsed => {
-              let object = parsed.unwrap().eval();
+              let object = parsed.unwrap().eval(&env);
               handle_error!(object => print_object(object.unwrap()));
           });
         }

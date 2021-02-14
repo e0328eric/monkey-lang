@@ -1,7 +1,6 @@
 use std::fmt::{self, Debug, Display};
 
 use crate::lexer::token::Token;
-use crate::object::Object;
 
 pub enum MonkeyErr {
   // These two errors are critical errors so that the program panics
@@ -14,14 +13,12 @@ pub enum MonkeyErr {
   InfixParseNoneErr { got: Token },
   ParseExprErr { expected: String, got: Token },
   ParseTokDiffErr { expected: Token, got: Token },
+  EvalErr { msg: String },
 }
 
 impl MonkeyErr {
   pub fn is_critical_err(&self) -> bool {
-    match self {
-      MonkeyErr::IOErr(_) | MonkeyErr::FmtErr(_) => true,
-      _ => false,
-    }
+    matches!(self, Self::IOErr(_) | Self::FmtErr(_))
   }
 }
 
@@ -34,42 +31,44 @@ impl_partialeq!(
     PrefixParseNoneErr { .. },
     InfixParseNoneErr { .. },
     ParseExprErr { .. },
-    ParseTokDiffErr { .. }
+    ParseTokDiffErr { .. },
+    EvalErr { .. }
 );
 
 impl Display for MonkeyErr {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      MonkeyErr::IOErr(ref e) => Display::fmt(e, f),
-      MonkeyErr::FmtErr(ref e) => Display::fmt(e, f),
-      MonkeyErr::CannotConvertStringErr { got } => {
+      Self::IOErr(ref e) => Display::fmt(e, f),
+      Self::FmtErr(ref e) => Display::fmt(e, f),
+      Self::CannotConvertStringErr { got } => {
         write!(f, "Cannot take string from {}", got.take_tok_name())
       }
-      MonkeyErr::CannotConvertSymbolErr { got } => {
+      Self::CannotConvertSymbolErr { got } => {
         write!(f, "Cannot convery symbol from {}", got.take_tok_name())
       }
-      MonkeyErr::PrefixParseNoneErr { got } => write!(
+      Self::PrefixParseNoneErr { got } => write!(
         f,
         "Cannot take prefix function for {} found",
         got.take_tok_name()
       ),
-      MonkeyErr::InfixParseNoneErr { got } => write!(
+      Self::InfixParseNoneErr { got } => write!(
         f,
         "Cannot take infix function for {} found",
         got.take_tok_name()
       ),
-      MonkeyErr::ParseExprErr { expected, got } => write!(
+      Self::ParseExprErr { expected, got } => write!(
         f,
         "Cannot parse {0} with {1}",
         expected,
         got.take_tok_name()
       ),
-      MonkeyErr::ParseTokDiffErr { expected, got } => write!(
+      Self::ParseTokDiffErr { expected, got } => write!(
         f,
         "Expected next token to be {0}, got {1} instead",
         expected.take_tok_name(),
         got.take_tok_name()
       ),
+      Self::EvalErr { msg } => write!(f, "{}", msg),
     }
   }
 }

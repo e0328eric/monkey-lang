@@ -196,6 +196,7 @@ impl Parser {
     Ok(expr)
   }
 
+  #[allow(clippy::unnecessary_wraps)]
   fn parse_boolean(&mut self) -> error::Result<Expression> {
     Ok(Expression::Boolean(self.take_token().0 == &Token::TRUE))
   }

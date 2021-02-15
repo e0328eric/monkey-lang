@@ -66,6 +66,7 @@ impl Evaluatable for Expression {
       Self::Integer(n) => Ok(Object::Integer(*n)),
       Self::Boolean(b) => Ok(if *b { TRUE } else { FALSE }),
       Self::String(s) => Ok(Object::String(s.clone())),
+      Self::Array(array) => Ok(Object::Array(eval_expressions(array, env)?)),
       Self::Prefix { operator, right } => eval_prefix_expression(operator, (*right).eval(env)?),
       Self::IfExpr {
         condition,
@@ -137,6 +138,9 @@ fn eval_prefix_expression(operator: &Token, right: Object) -> error::Result<Obje
 }
 
 fn eval_infix_expression(left: Object, operator: &Token, right: Object) -> error::Result<Object> {
+  if operator == &Token::LBRACKET {
+    return eval_index_expression(left, right);
+  }
   match (&left, &right) {
     (Object::Integer(_), Object::Integer(_)) => {
       eval_integer_infix_expression(left, operator, right)
@@ -240,6 +244,22 @@ fn eval_string_infix_expression(
   };
 
   Ok(Object::String(left_val + &right_val))
+}
+
+fn eval_index_expression(left: Object, right: Object) -> error::Result<Object> {
+  match (&left, &right) {
+    (Object::Array(array), Object::Integer(idx)) => {
+      let max = (array.len() - 1) as i64;
+
+      if *idx < 0 || *idx > max {
+        return Ok(NULL);
+      }
+      Ok(array[*idx as usize].clone())
+    }
+    _ => Err(Error::EvalErr {
+      msg: format!("index operator not supported: {}", left.r#type()),
+    }),
+  }
 }
 
 #[allow(clippy::ptr_arg)]

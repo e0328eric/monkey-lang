@@ -2,13 +2,16 @@
 
 #[macro_use]
 mod macros;
+mod code;
+mod compiler;
 mod error;
 mod evaluator;
 mod lexer;
 mod object;
 mod parser;
+mod vm;
 
-use crate::evaluator::Evaluatable;
+use crate::evaluator::Evaluable;
 use crate::lexer::Lexer;
 use crate::object::{Environment, Object};
 use crate::parser::Parser;

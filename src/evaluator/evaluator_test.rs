@@ -204,6 +204,7 @@ make_test_case!(test_len_builtin_function |
     test_integer_object with err
 );
 
+#[allow(clippy::unnecessary_wraps)]
 fn test_integer_object(evaluated: Object, expected: &error::Result<i64>) -> error::Result<()> {
   if let Object::Integer(n) = evaluated {
     assert_eq!(&Ok(n), expected);
@@ -214,6 +215,7 @@ fn test_integer_object(evaluated: Object, expected: &error::Result<i64>) -> erro
   Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn test_bool_object(evaluated: Object, expected: &error::Result<bool>) -> error::Result<()> {
   if let Object::Boolean(b) = evaluated {
     assert_eq!(&Ok(b), expected);
@@ -227,7 +229,7 @@ fn test_bool_object(evaluated: Object, expected: &error::Result<bool>) -> error:
 fn test_if_case_helper(tt: &Expected<'_, Object>) -> error::Result<()> {
   let evaluated = test_eval(tt.input)?;
   if let Object::Integer(n) = tt.expected {
-    test_integer_object(evaluated, &Ok(n));
+    test_integer_object(evaluated, &Ok(n))?;
   } else {
     assert_eq!(evaluated, NULL);
   }

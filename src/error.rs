@@ -14,6 +14,7 @@ pub enum MonkeyErr {
   ParseExprErr { expected: String, got: Token },
   ParseTokDiffErr { expected: Token, got: Token },
   EvalErr { msg: String },
+  CompileErr { msg: String},
 }
 
 impl MonkeyErr {
@@ -32,7 +33,8 @@ impl_partialeq!(
     InfixParseNoneErr { .. },
     ParseExprErr { .. },
     ParseTokDiffErr { .. },
-    EvalErr { .. }
+    EvalErr { .. },
+    CompileErr { .. }
 );
 
 impl Display for MonkeyErr {
@@ -68,7 +70,8 @@ impl Display for MonkeyErr {
         expected.take_tok_name(),
         got.take_tok_name()
       ),
-      Self::EvalErr { msg } => write!(f, "{}", msg),
+      Self::EvalErr { msg } => write!(f, "Eval error: {}", msg),
+      Self::CompileErr { msg } => write!(f, "Compile error: {}", msg),
     }
   }
 }

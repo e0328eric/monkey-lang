@@ -11,11 +11,11 @@ use std::rc::Rc;
 
 type Error = error::MonkeyErr;
 
-pub trait Evaluatable {
+pub trait Evaluable {
   fn eval(&self, env: &EnvWrapper) -> error::Result<Object>;
 }
 
-impl Evaluatable for Program {
+impl Evaluable for Program {
   fn eval(&self, env: &EnvWrapper) -> error::Result<Object> {
     let mut result = NULL;
 
@@ -30,7 +30,7 @@ impl Evaluatable for Program {
   }
 }
 
-impl Evaluatable for BlockStmt {
+impl Evaluable for BlockStmt {
   fn eval(&self, env: &EnvWrapper) -> error::Result<Object> {
     let mut result = NULL;
 
@@ -45,7 +45,7 @@ impl Evaluatable for BlockStmt {
   }
 }
 
-impl Evaluatable for Statement {
+impl Evaluable for Statement {
   fn eval(&self, env: &EnvWrapper) -> error::Result<Object> {
     match self {
       Self::ExpressionStmt { expression } => expression.eval(env),
@@ -59,7 +59,7 @@ impl Evaluatable for Statement {
   }
 }
 
-impl Evaluatable for Expression {
+impl Evaluable for Expression {
   fn eval(&self, env: &EnvWrapper) -> error::Result<Object> {
     match self {
       Self::Ident(string) => eval_ident(string, env),
@@ -94,6 +94,7 @@ impl Evaluatable for Expression {
         let args = eval_expressions(arguments, env)?;
         apply_function(fnt, args)
       }
+      Self::Hash { key, value } => eval_hash_literal(key, value, env),
       _ => Ok(NULL),
     }
   }
@@ -256,6 +257,18 @@ fn eval_index_expression(left: Object, right: Object) -> error::Result<Object> {
       }
       Ok(array[*idx as usize].clone())
     }
+    (Object::Hash(hash), _) => {
+      if let Some(hash_key) = right.hash_key() {
+        let pair = hash.pairs.get(&hash_key);
+        if let Some(hash_pair) = pair {
+          return Ok(hash_pair.value());
+        }
+        return Ok(NULL);
+      }
+      return Err(Error::EvalErr {
+        msg: format!("unusable as hash key: {}", right.r#type()),
+      });
+    }
     _ => Err(Error::EvalErr {
       msg: format!("index operator not supported: {}", left.r#type()),
     }),
@@ -333,4 +346,30 @@ fn unwrap_return_value(evaluated: Object) -> Object {
   } else {
     evaluated
   }
+}
+
+fn eval_hash_literal(
+  key: &[Expression],
+  value: &[Expression],
+  env: &EnvWrapper,
+) -> error::Result<Object> {
+  let pairs = key.iter().zip(value.iter());
+  let mut hash: Box<Hash> = Box::new(Hash::default());
+
+  for (k, v) in pairs {
+    let key = k.eval(env)?;
+
+    if key.hash_key().is_none() {
+      return Err(Error::EvalErr {
+        msg: format!("unusable as hash key: {}", key.r#type()),
+      });
+    }
+
+    let value = v.eval(env)?;
+    let hashed = key.hash_key().unwrap();
+
+    hash.pairs.insert(hashed, HashPair::new(key, value));
+  }
+
+  Ok(Object::Hash(hash))
 }

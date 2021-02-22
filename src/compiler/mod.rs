@@ -1,12 +1,11 @@
 #[cfg(test)]
 mod compiler_test;
 
-use crate::code::{self, Definition, Instructions, Opcode};
-use crate::error::{self, MonkeyErr};
+use crate::code::{self, Instructions, Opcode};
+use crate::error;
 use crate::object::Object;
-use crate::parser::ast::Program;
+use crate::parser::ast::*;
 
-#[derive(Default)]
 pub struct Compiler {
   instructions: Instructions,
   constants: Vec<Object>,
@@ -19,19 +18,31 @@ pub struct Bytecode {
 
 impl Compiler {
   pub fn new() -> Self {
-    Self::default()
-  }
-
-  pub fn compile(&mut self, node: Program) -> error::Result<()> {
-    Err(MonkeyErr::CompileErr { msg: String::new() })
-  }
-}
-
-impl From<Compiler> for Bytecode {
-  fn from(comp: Compiler) -> Self {
     Self {
-      instructions: comp.instructions,
-      constants: comp.constants,
+      instructions: Vec::new(),
+      constants: Vec::new(),
     }
+  }
+
+  pub fn compile(&mut self, prog: Program) -> error::Result<()> {
+    for stmt in prog.get_stmts() {
+      self.compile_stmt(stmt)?;
+    }
+    Ok(())
+  }
+
+  pub fn bytecode(&self) -> Bytecode {
+    Bytecode {
+      instructions: self.instructions.clone(),
+      constants: self.constants.clone(),
+    }
+  }
+
+  fn compile_stmt(&mut self, stmt: &Statement) -> error::Result<()> {
+    Ok(())
+  }
+
+  fn compile_expression(&mut self, expr: Expression) -> error::Result<()> {
+    Ok(())
   }
 }

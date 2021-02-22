@@ -1,108 +1,72 @@
 #![allow(unused)]
+#[cfg(test)]
+mod code_test;
+
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Opcode {
   OpConstant,
 }
 
-pub type Instructions = Vec<u8>;
-
-pub struct Definition<'a> {
-  name: &'a str,
-  op_widths: &'a [usize],
-}
+pub type Instructions = Vec<Opcode>;
 
 impl Opcode {
   pub fn lookup(&self) -> Definition<'_> {
     match self {
-      Self::OpConstant => Definition {
-        name: "OpConstant",
-        op_widths: &[2],
-      },
-    }
-  }
-}
-
-impl Into<u8> for Opcode {
-  fn into(self) -> u8 {
-    match self {
-      Self::OpConstant => 0,
-    }
-  }
-}
-
-#[allow(clippy::single_match)]
-pub fn make(op: Opcode, operands: &[i64]) -> Vec<u8> {
-  let def = op.lookup();
-  let mut instruction_len = 1;
-
-  for w in def.op_widths {
-    instruction_len += w;
-  }
-
-  let mut instruction: Vec<u8> = Vec::with_capacity(instruction_len);
-  instruction.push(op.into());
-
-  let mut offset = 1;
-  for (i, o) in operands.iter().enumerate() {
-    let width = def.op_widths[i];
-    match width {
-      2 => {
-        instruction.push(((*o as u16 & 0xff00) >> 8) as u8);
-        instruction.push((*o as u16 & 0x00ff) as u8);
-        offset += width;
-      }
-      _ => {}
+      Self::OpConstant => Definition::new("OpConstant", &[2]),
     }
   }
 
-  instruction
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  struct Expected<'a> {
-    op: Opcode,
-    operands: &'a [i64],
-    expected: &'a [u8],
+  fn definitions(&self) -> Definition<'_> {
+    self.lookup()
   }
 
-  impl<'a> Expected<'a> {
-    fn new(op: Opcode, operands: &'a [i64], expected: &'a [u8]) -> Self {
-      Self {
-        op,
-        operands,
-        expected,
-      }
+  #[allow(clippy::single_match)]
+  pub fn make(&self, operands: &[isize]) -> Vec<u8> {
+    let def = self.definitions();
+    let mut instruction_len = 1usize;
+
+    for w in def.operand_widths {
+      instruction_len += *w as usize;
     }
-  }
 
-  #[test]
-  fn test_make() {
-    let tests = &[Expected::new(Opcode::OpConstant, &[65534], &[0, 255, 254])];
+    let mut instruction = Vec::with_capacity(instruction_len);
+    instruction.push(*self as u8);
+    let mut offset = 1usize;
 
-    for tt in tests {
-      let instruction = make(tt.op, tt.operands);
-
-      if instruction.len() != tt.expected.len() {
-        panic!(
-          "instruction has wrong length. want = {}, got = {}",
-          tt.expected.len(),
-          instruction.len()
-        );
-      }
-
-      for (i, b) in tt.expected.iter().enumerate() {
-        if instruction[i] != tt.expected[i] {
-          panic!(
-            "wrong byte at pos {}. want = {}, got = {}",
-            i, b, instruction[i]
-          );
+    for (i, o) in operands.iter().enumerate() {
+      let width = def.operand_widths[i];
+      match width {
+        2 => {
+          instruction.push((((*o as u16) & 0xff00) >> 8) as u8);
+          instruction.push(((*o as u16) & 0x00ff) as u8);
         }
+        _ => {}
       }
+      offset += width as usize;
+    }
+
+    instruction
+  }
+}
+
+impl From<u8> for Opcode {
+  fn from(source: u8) -> Self {
+    Self::OpConstant
+  }
+}
+
+pub struct Definition<'a> {
+  name: &'static str,
+  operand_widths: &'a [isize],
+}
+
+impl<'a> Definition<'a> {
+  fn new(name: &'static str, operand_widths: &'a [isize]) -> Self {
+    Self {
+      name,
+      operand_widths,
     }
   }
 }

@@ -14,7 +14,7 @@ pub enum MonkeyErr {
   ParseExprErr { expected: String, got: Token },
   ParseTokDiffErr { expected: Token, got: Token },
   EvalErr { msg: String },
-  CompileErr { msg: String},
+  CompileErr { msg: String },
 }
 
 impl MonkeyErr {

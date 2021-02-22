@@ -1,15 +1,30 @@
 use super::*;
+use crate::error::MonkeyErr;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
+use std::any::Any;
 
-struct Expect<'a, T> {
-  input: &'a str,
-  expt_consts: &'a [T],
-  expt_instructions: Vec<Instructions>,
+macro_rules! emit_error {
+  ($msg: expr) => {
+    return Err(MonkeyErr::CompileErr {
+      msg: format!($msg)
+    });
+  };
+  ($msg: expr, $($args: expr),*) => {
+    return Err(MonkeyErr::CompileErr {
+      msg: format!($msg, $($args),*)
+    });
+  };
 }
 
-impl<'a, T> Expect<'a, T> {
-  fn new(input: &'a str, expt_consts: &'a [T], expt_instructions: Vec<Instructions>) -> Self {
+struct Expect<'a> {
+  input: &'a str,
+  expt_consts: &'a [&'a dyn Any],
+  expt_instructions: Vec<Vec<u8>>,
+}
+
+impl<'a> Expect<'a> {
+  fn new(input: &'a str, expt_consts: &'a [&'a dyn Any], expt_instructions: Vec<Vec<u8>>) -> Self {
     Self {
       input,
       expt_consts,
@@ -20,27 +35,91 @@ impl<'a, T> Expect<'a, T> {
 
 #[test]
 fn test_integer_arithmetic() -> error::Result<()> {
-  let tests: &[Expect<'_, i64>] = &[Expect::new(
+  let tests: &[Expect<'_>] = &[Expect::new(
     "1 + 2",
-    &[1, 2],
-    vec![
-      code::make(Opcode::OpConstant, &[0]),
-      code::make(Opcode::OpConstant, &[1]),
-    ],
+    &[&1, &2],
+    vec![Opcode::OpConstant.make(&[0]), Opcode::OpConstant.make(&[1])],
   )];
 
   run_compiler_test(tests)
 }
 
-fn run_compiler_test<'a, T>(tests: &'a [Expect<'a, T>]) -> error::Result<()> {
+fn run_compiler_test<'a>(tests: &'a [Expect<'a>]) -> error::Result<()> {
   for tt in tests {
     let program = Parser::new(Lexer::new(tt.input)).parse_program()?;
 
     let mut compiler = Compiler::new();
     compiler.compile(program)?;
-    let bytecode = Bytecode::from(compiler);
+    let bytecode = compiler.bytecode();
 
-    // TODO: Implement this further
+    test_instructions(&tt.expt_instructions, bytecode.instructions)?;
+
+    test_constants(tt.expt_consts, &bytecode.constants)?;
+  }
+
+  Ok(())
+}
+
+fn parse(input: String) -> Program {
+  let l = Lexer::new(&input);
+  let mut p = Parser::new(l);
+
+  // This unwrap() can be panic.
+  // However, this function is used only by testing compiler.
+  // So, if a panic occured, we can think that the test failed.
+  p.parse_program().unwrap()
+}
+
+fn test_instructions(expect: &[Vec<u8>], actual: Instructions) -> error::Result<()> {
+  let concatted = expect.concat();
+
+  if actual.len() != concatted.len() {
+    emit_error!(
+      "wrong instructions length.\nwant = {:?}, got = {:?}",
+      concatted,
+      actual
+    );
+  }
+
+  for (i, ins) in concatted.iter().enumerate() {
+    if actual[i] != (*ins).into() {
+      emit_error!(
+        "wrong instructions at {}.\nwant = {:?}, got = {:?}",
+        i,
+        concatted,
+        actual
+      );
+    }
+  }
+
+  Ok(())
+}
+
+fn test_constants(expect: &[&dyn Any], actual: &[Object]) -> error::Result<()> {
+  if expect.len() != actual.len() {
+    emit_error!(
+      "wrong number of constants.\nwant = {}, got = {}",
+      expect.len(),
+      actual.len()
+    );
+  }
+
+  for (i, constant) in expect.iter().enumerate() {
+    if constant.is::<i16>() {
+      test_integer_object(constant.downcast_ref::<i64>().unwrap(), &actual[i]);
+    }
+  }
+
+  Ok(())
+}
+
+fn test_integer_object(expected: &i64, actual: &Object) -> error::Result<()> {
+  if let Object::Integer(n) = actual {
+    if n != expected {
+      emit_error!("object has wrong value. got={}, want={}", n, expected);
+    }
+  } else {
+    emit_error!("object is not Integer.");
   }
 
   Ok(())

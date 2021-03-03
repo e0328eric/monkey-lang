@@ -7,23 +7,24 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 struct Expected<'a, T> {
-  input: &'a str,
-  expected: T,
+    input: &'a str,
+    expected: T,
 }
 
 impl<'a, T> Expected<'a, T> {
-  fn new(input: &'a str, expected: T) -> Box<Self> {
-    Box::new(Self { input, expected })
-  }
+    fn new(input: &'a str, expected: T) -> Box<Self> {
+        Box::new(Self { input, expected })
+    }
 }
 
-fn test_eval(input: &str) -> error::Result<Object> {
-  let env = Rc::new(RefCell::new(Environment::new()));
-  let l = Lexer::new(input);
-  let mut p = Parser::new(l);
-  let program = p.parse_program();
+fn test_eval(input: &str) -> error::Result<GCBox<Object>> {
+    let env = Rc::new(RefCell::new(Environment::new()));
+    let l = Lexer::new(input);
+    let mut p = Parser::new(l);
+    let program = p.parse_program();
+    let mut eval = Evaluator::new();
 
-  program.expect("Parse Error Occured!").eval(&env)
+    eval.eval(program.expect("Parse Error Occured!"), &env)
 }
 
 macro_rules! make_test_case {
@@ -36,7 +37,7 @@ macro_rules! make_test_case {
 
       for tt in tests {
         let evaluated = test_eval(tt.input)?;
-        $test_case(evaluated, &Ok(tt.expected))?;
+        $test_case((*evaluated).clone(), &Ok(tt.expected))?;
       }
 
       Ok(())
@@ -52,7 +53,7 @@ macro_rules! make_test_case {
       for tt in tests {
         let evaluated = test_eval(tt.input);
         match evaluated {
-            Ok(val) => $test_case(val, &tt.expected)?,
+            Ok(val) => $test_case((*val).clone(), &tt.expected)?,
             Err(MonkeyErr::EvalErr { msg: evaled_msg }) => {
                 let expected_msg = if let Err(MonkeyErr::EvalErr { msg }) = &tt.expected {
                     msg
@@ -157,32 +158,32 @@ make_test_case!(test_let_statements |
 
 #[test]
 fn test_function_object() -> error::Result<()> {
-  let input = "fn(x) { x + 2; };";
+    let input = "fn(x) { x + 2; };";
 
-  let evaluated = test_eval(input)?;
-  if let Object::Function(fnt) = evaluated {
-    if fnt.get_param().len() != 1 {
-      panic!(
-        "Function has wrong parameters. Parameters = {}",
-        fnt.get_param().len()
-      );
-    }
-    if "x" == &fnt.get_param()[0] {
-      let expected_body = vec![Statement::ExpressionStmt {
-        expression: Expression::Infix {
-          left: Box::new(Expression::Ident(String::from("x"))),
-          operator: Token::PLUS,
-          right: Box::new(Expression::Integer(2)),
-        },
-      }];
-      assert_eq!(fnt.get_body(), &expected_body);
-      Ok(())
+    let evaluated = test_eval(input)?;
+    if let Object::Function(fnt) = &*evaluated {
+        if fnt.get_param().len() != 1 {
+            panic!(
+                "Function has wrong parameters. Parameters = {}",
+                fnt.get_param().len()
+            );
+        }
+        if "x" == &fnt.get_param()[0] {
+            let expected_body = vec![Statement::ExpressionStmt {
+                expression: Expression::Infix {
+                    left: Box::new(Expression::Ident(String::from("x"))),
+                    operator: Token::PLUS,
+                    right: Box::new(Expression::Integer(2)),
+                },
+            }];
+            assert_eq!(fnt.get_body(), &expected_body);
+            Ok(())
+        } else {
+            panic!("parameter is not 'x'. got = {}", fnt.get_param()[0]);
+        }
     } else {
-      panic!("parameter is not 'x'. got = {}", fnt.get_param()[0]);
+        panic!("Object is not Function. got = {:?}", evaluated);
     }
-  } else {
-    panic!("Object is not Function. got = {:?}", evaluated);
-  }
 }
 
 make_test_case!(test_function_application |
@@ -206,33 +207,33 @@ make_test_case!(test_len_builtin_function |
 
 #[allow(clippy::unnecessary_wraps)]
 fn test_integer_object(evaluated: Object, expected: &error::Result<i64>) -> error::Result<()> {
-  if let Object::Integer(n) = evaluated {
-    assert_eq!(&Ok(n), expected);
-  } else {
-    panic!("Object is not Integer. got = {:?}", evaluated);
-  }
+    if let Object::Integer(n) = evaluated {
+        assert_eq!(&Ok(n), expected);
+    } else {
+        panic!("Object is not Integer. got = {:?}", evaluated);
+    }
 
-  Ok(())
+    Ok(())
 }
 
 #[allow(clippy::unnecessary_wraps)]
 fn test_bool_object(evaluated: Object, expected: &error::Result<bool>) -> error::Result<()> {
-  if let Object::Boolean(b) = evaluated {
-    assert_eq!(&Ok(b), expected);
-  } else {
-    panic!("Object is not Boolean. got = {:?}", evaluated);
-  }
+    if let Object::Boolean(b) = evaluated {
+        assert_eq!(&Ok(b), expected);
+    } else {
+        panic!("Object is not Boolean. got = {:?}", evaluated);
+    }
 
-  Ok(())
+    Ok(())
 }
 
 fn test_if_case_helper(tt: &Expected<'_, Object>) -> error::Result<()> {
-  let evaluated = test_eval(tt.input)?;
-  if let Object::Integer(n) = tt.expected {
-    test_integer_object(evaluated, &Ok(n))?;
-  } else {
-    assert_eq!(evaluated, NULL);
-  }
+    let evaluated = test_eval(tt.input)?;
+    if let Object::Integer(n) = tt.expected {
+        test_integer_object((*evaluated).clone(), &Ok(n))?;
+    } else {
+        assert_eq!(*evaluated, NULL);
+    }
 
-  Ok(())
+    Ok(())
 }

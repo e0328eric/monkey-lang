@@ -1,5 +1,6 @@
-// #[cfg(test)]
-// mod compiler_test;
+#![allow(unused)]
+#[cfg(test)]
+mod compiler_test;
 
 use crate::code::{self, Instructions, Opcode};
 use crate::error;

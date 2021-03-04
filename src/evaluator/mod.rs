@@ -1,4 +1,3 @@
-#![recursion_limit = "500"]
 #[cfg(test)]
 mod evaluator_test;
 pub mod gc;
@@ -42,6 +41,7 @@ impl Evaluator {
         Ok(result)
     }
 
+    #[allow(clippy::ptr_arg)]
     fn eval_block_stmts(
         &mut self,
         stmts: &BlockStmt,

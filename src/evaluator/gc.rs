@@ -57,19 +57,6 @@ impl<T> GCBox<T> {
         self.next.set(Some(other));
     }
 
-    fn free_next(&mut self) {
-        if let Some(ptr) = self.next.get() {
-            unsafe {
-                // SAFETY: Since we allocate this memory by Box,
-                // and there is no other tools to modify this part only except
-                // using functions implemented here, which are private,
-                // pointer cannot be null.
-                drop(Box::from_raw(ptr));
-            }
-            self.next.set(None);
-        }
-    }
-
     pub fn mark(&mut self) {
         self.is_marked = true;
     }

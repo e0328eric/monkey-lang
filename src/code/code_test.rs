@@ -17,7 +17,7 @@ impl<'a> Expect<'a> {
 }
 
 #[test]
-fn test_make() {
+fn test_make() -> error::Result<()> {
     let tests = &[Expect::new(
         Opcode::OpConstant,
         &[65534],
@@ -25,11 +25,7 @@ fn test_make() {
     )];
 
     for tt in tests {
-        let instruction = if let Some(def) = tt.op.make(tt.operands) {
-            def
-        } else {
-            return;
-        };
+        let instruction = tt.op.make(tt.operands)?;
 
         if instruction.len() != tt.expected.len() {
             panic!(
@@ -48,20 +44,23 @@ fn test_make() {
             }
         }
     }
+
+    Ok(())
 }
 
 #[test]
-fn test_instructions_string() {
+fn test_instructions_string() -> error::Result<()> {
     let instructions = vec![
         Opcode::OpConstant.make(&[1]).unwrap(),
         Opcode::OpConstant.make(&[2]).unwrap(),
         Opcode::OpConstant.make(&[65535]).unwrap(),
     ];
 
-    let expected = "0000 OpConstant 1\n0003 OpConstant 2\n0006 OpConstant 65535";
+    let expected = "0000 OpConstant 1\n0003 OpConstant 2\n0006 OpConstant 65535\n";
     let concatted = instructions.concat();
 
-    assert_eq!(to_readable(concatted), expected);
+    assert_eq!(to_readable(concatted)?, expected);
+    Ok(())
 }
 
 #[test]
@@ -86,7 +85,7 @@ fn test_read_operands() {
         let mut def = tt.op.lookup().unwrap();
 
         let (operand_read, n) = def.read_operands(&instruction[1..]);
-        assert_eq!(n, tt.bytes_read);
+        assert_eq!(n as isize, tt.bytes_read);
 
         for (i, want) in tt.operands.iter().enumerate() {
             assert_eq!(operand_read[i], *want);

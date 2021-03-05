@@ -83,8 +83,8 @@ fn test_instructions(expect: &[Vec<u8>], actual: Instructions) -> error::Result<
     if actual.len() != concatted.len() {
         emit_error!(
             "wrong instructions length.\nwant = {:?}, got = {:?}",
-            concatted,
-            actual
+            code::to_readable(concatted)?,
+            code::to_readable(actual)?
         );
     }
 
@@ -93,8 +93,8 @@ fn test_instructions(expect: &[Vec<u8>], actual: Instructions) -> error::Result<
             emit_error!(
                 "wrong instructions at {}.\nwant = {:?}, got = {:?}",
                 i,
-                concatted,
-                actual
+                code::to_readable(concatted)?,
+                code::to_readable(actual)?
             );
         }
     }

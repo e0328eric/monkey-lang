@@ -1,3 +1,6 @@
+// This code is very unsafe but I realize it after implementing all of the evaluating part.
+// GCBox<T> can be freed only if it is linked into GC<T>.
+
 use crate::object::{EnvWrapper, Object};
 use std::cell::Cell;
 use std::marker::PhantomData;
@@ -78,6 +81,8 @@ pub struct GC<T> {
 }
 
 impl<T> GC<T> {
+    // This function is actually unsafe because to_add can be removed
+    // before reading it in GC
     pub fn add(&mut self, to_add: &mut GCBox<T>) {
         self.head.link_next(to_add as *mut GCBox<T>);
     }

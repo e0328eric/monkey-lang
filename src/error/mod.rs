@@ -1,7 +1,11 @@
+#[macro_use]
+mod macros;
+
 use std::fmt::{self, Debug, Display};
 
 use crate::lexer::token::Token;
 
+#[allow(clippy::upper_case_acronyms)]
 pub enum MonkeyErr {
     // These two errors are critical errors so that the program panics
     IOErr(std::io::Error),
@@ -27,8 +31,7 @@ impl MonkeyErr {
 }
 
 impl_partialeq!(
-    MonkeyErr =>>
-    IOErr(_),
+    MonkeyErr: IOErr(_),
     FmtErr(_),
     CannotConvertStringErr { .. },
     CannotConvertSymbolErr { .. },
